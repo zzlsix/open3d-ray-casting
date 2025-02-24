@@ -3,15 +3,18 @@ import numpy as np
 from typing import Tuple, List, Optional
 from open3d.cpu.pybind.camera import PinholeCameraParameters, PinholeCameraIntrinsic
 from open3d.cpu.pybind.visualization import ViewControl, VisualizerWithKeyCallback
-from open3d.visualization import Visualizer
 
-# AIGC START
 class ModelInteractor:
     def __init__(self, model_path: str):
+        # 模型路径
         self.model_path = model_path
+        # 保存点击的点
         self.clicked_points: List[Tuple[float, float]] = []
+        # 鼠标位移的位置
         self.last_cursor_pos: Optional[Tuple[float, float]] = None
+        # 标记旋转
         self.is_view_rotating = False
+        # 标记翻转
         self.is_translating = False
         self.pixel_to_rotate_scale_factor = 1
         self.pixel_to_translate_scale_factor = 1
@@ -138,4 +141,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-# AIGC END
