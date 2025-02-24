@@ -4,6 +4,7 @@ from typing import Tuple, List, Optional
 from open3d.cpu.pybind.camera import PinholeCameraParameters, PinholeCameraIntrinsic
 from open3d.cpu.pybind.visualization import ViewControl, VisualizerWithKeyCallback
 from open3d.visualization import Visualizer
+import os
 
 
 # AIGC START
@@ -39,7 +40,15 @@ class ModelInteractor:
         self.mesh = o3d.io.read_triangle_mesh(self.model_path,
                                               enable_post_processing=True,
                                               print_progress=True)
-        self.mesh.compute_vertex_normals()
+
+        # 检查并打印纹理信息
+        print(f"Model has textures: {self.mesh.has_textures()}")
+        if self.mesh.has_textures():
+            print(f"Number of textures: {len(self.mesh.textures)}")
+
+        # 确保法线和纹理坐标存在
+        if not self.mesh.has_vertex_normals():
+            self.mesh.compute_vertex_normals()
 
         # 初始化射线投射场景
         self.scene = o3d.t.geometry.RaycastingScene()
@@ -53,14 +62,8 @@ class ModelInteractor:
         mesh_t.vertex.positions = o3d.core.Tensor(vertices.astype(np.float32))
         mesh_t.triangle.indices = o3d.core.Tensor(triangles.astype(np.int32))
 
-        # 打印一些调试信息
-        print(f"Tensor mesh created:")
-        print(f"Vertices shape: {mesh_t.vertex.positions.shape}")
-        print(f"Triangles shape: {mesh_t.triangle.indices.shape}")
-
         # 添加到场景
         scene_id = self.scene.add_triangles(mesh_t)
-        print(f"Added to scene with ID: {scene_id}")
 
     def initialize_window(self, width: int = 1024, height: int = 768):
         """初始化GUI窗口"""
@@ -70,21 +73,22 @@ class ModelInteractor:
         self.window = ModelWindow(width, height, "3D模型交互器")
         self.widget3d = self.window.widget3d
 
-        # 使用模型原有的材质
+        # 设置材质
         material = o3d.visualization.rendering.MaterialRecord()
-        material.shader = "defaultLit"
+        material.shader = "defaultLit"  # 使用默认着色器
 
-        # 直接添加模型，保留原有纹理
+        # 添加模型到场景
         self.widget3d.scene.add_geometry("model", self.mesh, material)
 
         # 设置默认相机视角
         bounds = self.widget3d.scene.bounding_box
         self.widget3d.setup_camera(60, bounds, bounds.get_center())
 
-        # 打印场景信息
-        print(f"Scene bounding box: {bounds}")  # 调试信息
-        print(f"Model vertices: {len(self.mesh.vertices)}")  # 调试信息
-        print(f"Model triangles: {len(self.mesh.triangles)}")  # 调试信息
+        # 设置光照和背景
+        self.widget3d.scene.set_background([0.8, 0.8, 0.8, 1.0])  # 浅灰色背景
+        self.widget3d.scene.set_lighting(self.widget3d.scene.LightingProfile.NO_SHADOWS, [0, -1, -1])
+        self.widget3d.scene.show_skybox(False)
+        self.widget3d.scene.show_axes(True)
 
         # 注册事件回调
         self.widget3d.set_on_mouse(self._handle_mouse_event)

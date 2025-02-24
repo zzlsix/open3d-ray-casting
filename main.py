@@ -11,6 +11,10 @@ class ModelInteractor:
         self.model_path = model_path
         self.clicked_points: List[Tuple[float, float]] = []
         self.last_cursor_pos: Optional[Tuple[float, float]] = None
+        self.is_view_rotating = False
+        self.is_translating = False
+        self.pixel_to_rotate_scale_factor = 1
+        self.pixel_to_translate_scale_factor = 1
         self.mesh = None
         self.scene = None
 
@@ -72,13 +76,28 @@ class ModelInteractor:
 
     def handle_mouse_click(self, vis: VisualizerWithKeyCallback, button: int, action: int, mods: int) -> bool:
         """处理鼠标点击事件"""
-        if button == 1 and action == 1 and mods == 1 and self.last_cursor_pos:
+        buttons = ["left", "right", "middle"]
+        actions = ["up", "down"]
+        mods_name = ["shift", "ctrl", "alt", "cmd"]
+
+        button = buttons[button]
+        action = actions[action]
+        mods = [mods_name[i] for i in range(4) if mods & (1 << i)]
+
+        if button == "left" and action == "down":
+            self.is_view_rotating = True
+        elif button == "left" and action == "up":
+            self.is_view_rotating = False
+        elif button == "middle" and action == "down":
+            self.is_translating = True
+        elif button == "middle" and action == "up":
+            self.is_translating = False
+        elif button == "right" and action == "down":
             ray_origin, ray_dir = self.screen_to_world_ray(
-                self.last_cursor_pos, 
+                self.last_cursor_pos,
                 vis.get_view_control()
             )
             intersection_point = self.ray_mesh_intersection(ray_origin, ray_dir)
-            
             if intersection_point is not None:
                 print(f"交点坐标: {intersection_point}")
                 self.clicked_points.append(self.last_cursor_pos)
@@ -86,6 +105,14 @@ class ModelInteractor:
 
     def handle_mouse_move(self, vis: VisualizerWithKeyCallback, x: float, y: float) -> bool:
         """处理鼠标移动事件"""
+        if self.last_cursor_pos is not None:
+            move_x = x - self.last_cursor_pos[0]
+            move_y = y - self.last_cursor_pos[1]
+            view_control: ViewControl = vis.get_view_control()
+            if self.is_view_rotating:
+                view_control.rotate(move_x * self.pixel_to_rotate_scale_factor, move_y * self.pixel_to_rotate_scale_factor)
+            elif self.is_translating:
+                view_control.translate(move_x * self.pixel_to_translate_scale_factor, move_y * self.pixel_to_translate_scale_factor)
         self.last_cursor_pos = (x, y)
         return False
 
