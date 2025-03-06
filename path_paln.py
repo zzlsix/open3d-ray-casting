@@ -1,92 +1,278 @@
-import open3d as o3d
+import trimesh
+import networkx as nx
 import numpy as np
-import random
+import heapq
 from scipy.spatial import KDTree
 
-# 读取3D网格模型
-mesh = o3d.io.read_triangle_mesh("model.obj")
-mesh.compute_vertex_normals()
+model_path = r"C:\Users\mi\Downloads\Three-Dimension-3D\models\pc\0\terra_obj\Block\Block.obj"
 
-# 采样点云
-point_cloud = mesh.sample_points_uniformly(number_of_points=5000)
-pcd_points = np.asarray(point_cloud.points)
+# Load the scene
+scene = trimesh.load_scene(model_path)
+mesh = list(scene.geometry.values())[0]
+print(f"Mesh contains {len(mesh.vertices)} vertices and {len(mesh.faces)} faces")
 
-# 构建KDTree用于最近邻搜索
-kdtree = KDTree(pcd_points)
+# Create a graph representation
+G = nx.Graph()
 
-# 定义起点、途径点、终点 (请替换为实际坐标)
-A = np.array([1.0, 1.0, 1.0])  # 起点
-B = np.array([2.0, 2.5, 1.5])  # 途径点
-C = np.array([3.0, 3.0, 2.0])  # 终点
+# Add vertices to the graph
+for i, vertex in enumerate(mesh.vertices):
+    G.add_node(i, position=vertex)
 
+# Add edges from the mesh faces
+edges = set()
+for face in mesh.faces:
+    edges.add((face[0], face[1]))
+    edges.add((face[1], face[2]))
+    edges.add((face[2], face[0]))
 
-# 检查点是否在障碍物内（如果最近邻点太近，则视为碰撞）
-def is_colliding(point, threshold=0.05):
-    _, nearest_dist = kdtree.query(point)
-    return nearest_dist < threshold
+# Add all edges with weights
+for v1, v2 in edges:
+    weight = np.linalg.norm(mesh.vertices[v1] - mesh.vertices[v2])
+    G.add_edge(v1, v2, weight=weight)
 
+print(f"Graph created with {G.number_of_nodes()} nodes and {G.number_of_edges()} edges")
 
-# RRT 采样函数
-def sample_free_space():
-    while True:
-        sample = np.array([
-            random.uniform(np.min(pcd_points[:, 0]), np.max(pcd_points[:, 0])),
-            random.uniform(np.min(pcd_points[:, 1]), np.max(pcd_points[:, 1])),
-            random.uniform(np.min(pcd_points[:, 2]), np.max(pcd_points[:, 2])),
-        ])
-        if not is_colliding(sample):
-            return sample
+# Define waypoints
+waypoints = [
+    [78.56310916, 29.99410818, -162.10114156],  # start
+    [83.32050134, 42.84368528, -164.97868412],
+    [94.56436536, 52.84385806, -162.24338607],
+    [77.65503504, 54.38683771, -166.85624655]  # end
+]
 
+# Create a KDTree for efficient nearest neighbor search
+vertex_kdtree = KDTree(mesh.vertices)
 
-# RRT 路径规划
-def rrt(start, goal, max_iter=1000, step_size=0.1):
-    tree = {tuple(start): None}  # 记录父子关系
-    nodes = [start]
+# Add waypoints to the graph
+waypoint_indices = []
+for i, point in enumerate(waypoints):
+    waypoint_idx = len(mesh.vertices) + i
+    waypoint_indices.append(waypoint_idx)
 
-    for _ in range(max_iter):
-        rand_point = sample_free_space()
-        nearest_node = min(nodes, key=lambda node: np.linalg.norm(node - rand_point))
-        direction = rand_point - nearest_node
-        new_node = nearest_node + (direction / np.linalg.norm(direction)) * step_size
+    # Add waypoint as a node
+    G.add_node(waypoint_idx, position=np.array(point))
 
-        if not is_colliding(new_node):
-            nodes.append(new_node)
-            tree[tuple(new_node)] = tuple(nearest_node)
+    # Connect to nearest vertices (increase k for better connectivity)
+    distances, indices = vertex_kdtree.query(point, k=50)  # Increased from 20 to 50
 
-            # 终点检查
-            if np.linalg.norm(new_node - goal) < step_size:
-                tree[tuple(goal)] = tuple(new_node)
-                return reconstruct_path(tree, start, goal)
+    # Connect waypoint to these vertices
+    for j, idx in enumerate(indices):
+        G.add_edge(waypoint_idx, idx, weight=distances[j])
 
-    return None  # 失败
+# Identify connected components
+components = list(nx.connected_components(G))
+print(f"Graph has {len(components)} connected components")
 
+# Map each waypoint to its component
+waypoint_components = {}
+for i, idx in enumerate(waypoint_indices):
+    for j, component in enumerate(components):
+        if idx in component:
+            print(f"Waypoint {i} is in component {j} with {len(component)} nodes")
+            waypoint_components[i] = j
+            break
 
-# 路径重建
-def reconstruct_path(tree, start, goal):
-    path = [goal]
-    current = tuple(goal)
-    while current != tuple(start):
-        current = tree[current]
-        path.append(np.array(current))
-    return path[::-1]  # 反转路径
+# SOLUTION: Connect the components that contain waypoints
+# This creates "bridge" edges between disconnected parts of the mesh
+waypoint_component_indices = {}
+for i, comp_idx in waypoint_components.items():
+    waypoint_component_indices[comp_idx] = i
 
+# Get a representative vertex from each component containing a waypoint
+component_representatives = {}
+for comp_idx in waypoint_component_indices.keys():
+    # Get a mesh vertex (not a waypoint) from this component
+    for vertex in components[comp_idx]:
+        if vertex < len(mesh.vertices):  # Ensure it's a mesh vertex
+            component_representatives[comp_idx] = vertex
+            break
 
-# 计算 A -> B -> C 路径
-path_A_B = rrt(A, B)
-path_B_C = rrt(B, C)
+# Connect the components with additional edges
+for i in range(len(waypoint_components) - 1):
+    comp1 = waypoint_components[i]
+    comp2 = waypoint_components[i + 1]
 
-if path_A_B and path_B_C:
-    path = path_A_B + path_B_C[1:]  # 合并路径
-    print("路径规划成功！")
+    if comp1 != comp2:  # Only if they're different components
+        v1 = waypoint_indices[i]  # Use the waypoint itself for more direct paths
+        v2 = waypoint_indices[i + 1]
+
+        # Add a direct edge between the waypoints
+        weight = np.linalg.norm(
+            np.array(G.nodes[v1]['position']) -
+            np.array(G.nodes[v2]['position'])
+        )
+        G.add_edge(v1, v2, weight=weight)
+        print(f"Added bridge edge from waypoint {i} to waypoint {i + 1}")
+
+# Verify connectivity after adding bridge edges
+if nx.is_connected(G):
+    print("Graph is now connected! Path finding should succeed.")
 else:
-    print("路径规划失败！")
-    exit()
+    print("Graph is still not fully connected. Additional bridges may be needed.")
 
-# 绘制路径
-lines = [[i, i + 1] for i in range(len(path) - 1)]
-line_set = o3d.geometry.LineSet()
-line_set.points = o3d.utility.Vector3dVector(path)
-line_set.lines = o3d.utility.Vector2iVector(lines)
+# Check direct connectivity between waypoints
+for i in range(len(waypoint_indices) - 1):
+    start = waypoint_indices[i]
+    end = waypoint_indices[i + 1]
+    if nx.has_path(G, start, end):
+        print(f"Waypoints {i} and {i + 1} are now connected in the graph")
+    else:
+        print(f"WARNING: Waypoints {i} and {i + 1} are still NOT connected in the graph")
 
-# 可视化
-o3d.visualization.draw_geometries([mesh, line_set])
+
+# A* algorithm for pathfinding (unchanged from previous code)
+def astar_path(graph, start_idx, goal_idx):
+    if start_idx == goal_idx:
+        return [start_idx]
+
+    g_scores = {start_idx: 0}
+    f_scores = {}
+    came_from = {}
+    open_set = []
+    counter = 0
+
+    start_pos = np.array(graph.nodes[start_idx]['position'])
+    goal_pos = np.array(graph.nodes[goal_idx]['position'])
+
+    h = np.linalg.norm(start_pos - goal_pos)
+    f_scores[start_idx] = h
+
+    heapq.heappush(open_set, (h, counter, start_idx))
+    counter += 1
+
+    open_set_hash = {start_idx}
+
+    while open_set:
+        _, _, current = heapq.heappop(open_set)
+        open_set_hash.remove(current)
+
+        if current == goal_idx:
+            path = []
+            while current in came_from:
+                path.append(current)
+                current = came_from[current]
+            path.append(start_idx)
+            return path[::-1]
+
+        for neighbor in graph.neighbors(current):
+            tentative_g = g_scores[current] + graph[current][neighbor]['weight']
+
+            if neighbor not in g_scores or tentative_g < g_scores[neighbor]:
+                came_from[neighbor] = current
+                g_scores[neighbor] = tentative_g
+
+                neighbor_pos = np.array(graph.nodes[neighbor]['position'])
+                h = np.linalg.norm(neighbor_pos - goal_pos)
+                f_scores[neighbor] = tentative_g + h
+
+                if neighbor not in open_set_hash:
+                    counter += 1
+                    heapq.heappush(open_set, (f_scores[neighbor], counter, neighbor))
+                    open_set_hash.add(neighbor)
+
+    return None
+
+
+# Find paths between all consecutive waypoints
+all_paths = []
+for i in range(len(waypoint_indices) - 1):
+    start_idx = waypoint_indices[i]
+    end_idx = waypoint_indices[i + 1]
+
+    print(f"Finding path from waypoint {i} to waypoint {i + 1}...")
+    path = astar_path(G, start_idx, end_idx)
+
+    if path:
+        print(f"Path found with {len(path)} points")
+        all_paths.append(path)
+    else:
+        print(f"Failed to find path between waypoints {i} and {i + 1}")
+
+# Combine all paths
+if len(all_paths) == len(waypoint_indices) - 1:
+    # Combine paths, removing duplicates at segment joins
+    full_path = all_paths[0]
+    for path in all_paths[1:]:
+        full_path.extend(path[1:])  # Skip first point as it's the same as last point of previous path
+
+    # Extract coordinates
+    path_coords = [G.nodes[idx]['position'] for idx in full_path]
+
+    # Create a new scene
+    path_scene = trimesh.Scene()
+
+    # Add the original mesh with proper rendering settings
+    mesh_copy = mesh.copy()
+    # Set the mesh to display with proper lighting
+    mesh_copy.visual.face_colors = [200, 200, 200, 255]  # Light gray
+    path_scene.add_geometry(mesh_copy)
+
+    # Add path segments as individual cylinders
+    for i in range(len(path_coords) - 1):
+        start = path_coords[i]
+        end = path_coords[i + 1]
+
+        # Create a cylinder for the path segment
+        # Compute direction vector and length
+        direction = end - start
+        length = np.linalg.norm(direction)
+
+        if length > 0:  # Skip zero-length segments
+            # Create a cylinder
+            cylinder = trimesh.creation.cylinder(
+                radius=0.3,  # Adjust for visibility
+                segment=[start, end],
+                sections=8  # Lower for better performance
+            )
+            cylinder.visual.face_colors = [255, 0, 0, 255]  # Red for path
+            path_scene.add_geometry(cylinder)
+
+    # Add waypoint markers
+    for i, point in enumerate(waypoints):
+        # Create a sphere for each waypoint - without the sections parameter
+        sphere = trimesh.primitives.Sphere(
+            center=point,
+            radius=0.5
+        )
+
+        # Different colors for start, intermediate, and end points
+        if i == 0:
+            sphere.visual.face_colors = [0, 255, 0, 255]  # Green for start
+        elif i == len(waypoints) - 1:
+            sphere.visual.face_colors = [255, 0, 0, 255]  # Red for end
+        else:
+            sphere.visual.face_colors = [0, 0, 255, 255]  # Blue for intermediate
+
+        path_scene.add_geometry(sphere)
+
+    # Save the visualization to files (for reliable viewing)
+    path_scene.export('path_visualization.glb')  # GLB format for 3D viewers
+
+    # Save a PNG render of the scene
+    png = path_scene.save_image(resolution=(1024, 768))
+    with open('path_visualization.png', 'wb') as f:
+        f.write(png)
+
+    print(f"Path visualization exported to path_visualization.glb and path_visualization.png")
+
+    # Show the scene
+    try:
+        path_scene.show()
+    except Exception as e:
+        print(f"Error displaying scene: {e}")
+        print("Please check the exported files instead.")
+else:
+    print("Could not find complete path through all waypoints.")
+
+    # Diagnostic visualization
+    diag_scene = trimesh.Scene()
+    diag_scene.add_geometry(mesh)
+
+    # Add spheres for waypoints
+    for i, point in enumerate(waypoints):
+        sphere = trimesh.primitives.Sphere(center=point, radius=0.5)
+        sphere.visual.face_colors = [255, 0, 0, 255]
+        diag_scene.add_geometry(sphere)
+
+    diag_scene.export('diagnostic.glb')
+    diag_scene.show()

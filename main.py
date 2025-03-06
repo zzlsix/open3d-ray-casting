@@ -101,6 +101,7 @@ class ModelInteractor:
         t_hit = intersection_result['t_hit'].numpy()
         if t_hit[0] >= 0 and not np.isinf(t_hit[0]):
             intersection_point = ray_origin + ray_direction * t_hit[0]
+            print(f"click:{self.clicked_points}")
             return intersection_point
         return None
 
