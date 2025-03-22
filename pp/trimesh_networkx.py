@@ -209,32 +209,49 @@ def create_path_between_points(mesh_path, start_point, end_point,
 
     # 8. 碰撞检测
     print("进行碰撞检测...")
-    collision_free = True
-    # 使用一个更简单的碰撞检测方法，避免依赖外部引擎
+    collision_points = []
+
     for i in range(len(path_indices) - 1):
         v1 = vertices[path_indices[i]]
         v2 = vertices[path_indices[i + 1]]
 
-        # 检查直线段是否与网格相交
-        ray_origin = v1
-        ray_direction = v2 - v1
-        ray_length = np.linalg.norm(ray_direction)
+        # 使用更精确的碰撞检测
+        if ray_collision_check(mesh, v1, v2, collision_safety_margin):
+            print(f"检测到碰撞在路径段 {i} 到 {i + 1}")
+            collision_points.append((i, v1, v2))
 
-        if ray_length > 0:
-            ray_direction = ray_direction / ray_length
-            # 使用trimesh内置射线检测
-            try:
-                hits = mesh.ray.intersects_any(
-                    ray_origins=[ray_origin + ray_direction * collision_safety_margin],
-                    ray_directions=[ray_direction]
-                )
-                if any(hits) and ray_length > 2 * collision_safety_margin:
-                    print(f"检测到碰撞在路径段 {i} 到 {i + 1}")
-                    collision_free = False
-            except AttributeError:
-                print("警告：无法进行碰撞检测，可能缺少必要的mesh属性")
+    if collision_points:
+        print(f"发现 {len(collision_points)} 个碰撞点")
 
-    if collision_free:
+        # 处理碰撞点 - 简单方法是从路径中移除碰撞段
+        if len(collision_points) < len(path_indices) - 1:  # 确保不会移除所有路径
+            new_path_indices = []
+            skip_mode = False
+
+            for i in range(len(path_indices)):
+                if i < len(path_indices) - 1:
+                    # 检查当前边是否是碰撞边
+                    is_collision_edge = any(cp[0] == i for cp in collision_points)
+
+                    if is_collision_edge:
+                        skip_mode = True
+                    elif skip_mode:
+                        skip_mode = False
+                        new_path_indices.append(path_indices[i])
+                    else:
+                        new_path_indices.append(path_indices[i])
+                else:
+                    # 总是保留最后一个点
+                    new_path_indices.append(path_indices[i])
+
+            path_indices = new_path_indices
+            print(f"移除碰撞段后的路径长度: {len(path_indices)}")
+
+            # 重新提取路径顶点
+            path_vertices = [vertices[idx] for idx in path_indices]
+        else:
+            print("警告: 所有路径段都存在碰撞，无法简单修复")
+    else:
         print("路径无碰撞")
 
     # 9. 平滑路径
@@ -247,10 +264,58 @@ def create_path_between_points(mesh_path, start_point, end_point,
 
     # 10. 可视化
     if visualize:
-        visualize_path(mesh, start_vertex, end_vertex, path_vertices, final_path)
+        visualize_with_open3d(mesh, start_vertex, end_vertex, path_vertices, final_path, collision_points)
 
     return final_path
 
+
+def ray_collision_check(mesh, start_point, end_point, safety_margin=0.01):
+    """更精确的射线碰撞检测"""
+    direction = end_point - start_point
+    distance = np.linalg.norm(direction)
+
+    if distance < 1e-6:  # 防止距离过小导致的问题
+        return False
+
+    direction = direction / distance
+
+    # 在起点略微偏移以避免自相交
+    offset_start = start_point + direction * safety_margin
+
+    # 设置射线长度略小于总距离，避免终点处的误检
+    ray_length = distance - 2 * safety_margin
+
+    if ray_length <= 0:
+        return False  # 太短的线段视为无碰撞
+
+    # 使用更多的中间采样点进行检测
+    samples = min(10, max(2, int(distance / 0.5)))  # 根据距离确定采样数
+
+    for i in range(samples):
+        # 创建均匀分布的采样点
+        t = i / (samples - 1)
+        ray_origin = offset_start + t * direction * ray_length
+
+        # 检查向下一个采样点的射线
+        if i < samples - 1:
+            next_origin = offset_start + (i + 1) / (samples - 1) * direction * ray_length
+            sub_direction = next_origin - ray_origin
+            sub_length = np.linalg.norm(sub_direction)
+
+            if sub_length > 0:
+                sub_direction = sub_direction / sub_length
+                try:
+                    hits = mesh.ray.intersects_any(
+                        ray_origins=[ray_origin],
+                        ray_directions=[sub_direction],
+                        ray_distances=[sub_length]
+                    )
+                    if any(hits):
+                        return True  # 检测到碰撞
+                except (AttributeError, ValueError) as e:
+                    print(f"射线检测异常: {e}")
+
+    return False  # 未检测到碰撞
 
 def smooth_path(path, mesh, safety_margin=0.01, iterations=2):
     """
@@ -376,46 +441,87 @@ def visualize_no_path(mesh, start, end, connected_components, vertices):
     plt.show()
 
 
-def visualize_path(mesh, start, end, original_path, smoothed_path=None):
-    """可视化网格和路径"""
-    fig = plt.figure(figsize=(12, 8))
-    ax = fig.add_subplot(111, projection='3d')
+def visualize_with_open3d(mesh, start, end, original_path, smoothed_path=None, collision_points=None):
+    """使用Open3D可视化3D模型和路径"""
+    try:
+        import open3d as o3d
+    except ImportError:
+        print("需要安装Open3D: pip install open3d")
+        return
 
-    # 绘制网格 (简化版)
-    verts = mesh.vertices
-    faces = mesh.faces
-    for face in faces[:1000]:  # 限制面数以提高性能
-        for i in range(3):
-            ax.plot3D(
-                [verts[face[i], 0], verts[face[(i + 1) % 3], 0]],
-                [verts[face[i], 1], verts[face[(i + 1) % 3], 1]],
-                [verts[face[i], 2], verts[face[(i + 1) % 3], 2]],
-                'gray', alpha=0.1
-            )
+    # 将Trimesh转换为Open3D网格
+    o3d_mesh = o3d.geometry.TriangleMesh()
+    o3d_mesh.vertices = o3d.utility.Vector3dVector(mesh.vertices)
+    o3d_mesh.triangles = o3d.utility.Vector3iVector(mesh.faces)
+    o3d_mesh.compute_vertex_normals()
 
-    # 绘制原始路径
+    # 创建原始路径的线集合
     path_array = np.array(original_path)
-    ax.plot3D(path_array[:, 0], path_array[:, 1], path_array[:, 2], 'r-', label='原始路径', linewidth=2)
+    path_lines = o3d.geometry.LineSet()
+    path_lines.points = o3d.utility.Vector3dVector(path_array)
+    path_lines.lines = o3d.utility.Vector2iVector(
+        [[i, i + 1] for i in range(len(path_array) - 1)]
+    )
+    path_lines.colors = o3d.utility.Vector3dVector([[1, 0, 0] for _ in range(len(path_array) - 1)])
 
-    # 绘制平滑后的路径
-    if smoothed_path is not None and smoothed_path != original_path:
+    # 创建平滑路径的线集合
+    smooth_lines = None
+    if smoothed_path is not None and id(smoothed_path) != id(original_path):
         smooth_array = np.array(smoothed_path)
-        ax.plot3D(smooth_array[:, 0], smooth_array[:, 1], smooth_array[:, 2], 'g-', label='平滑路径', linewidth=2)
+        smooth_lines = o3d.geometry.LineSet()
+        smooth_lines.points = o3d.utility.Vector3dVector(smooth_array)
+        smooth_lines.lines = o3d.utility.Vector2iVector(
+            [[i, i + 1] for i in range(len(smooth_array) - 1)]
+        )
+        smooth_lines.colors = o3d.utility.Vector3dVector([[0, 1, 0] for _ in range(len(smooth_array) - 1)])
 
-    # 绘制起点和终点
-    ax.scatter([start[0]], [start[1]], [start[2]], color='blue', s=100, label='起点')
-    ax.scatter([end[0]], [end[1]], [end[2]], color='green', s=100, label='终点')
+    # 创建起点和终点球体
+    start_sphere = o3d.geometry.TriangleMesh.create_sphere(radius=1.0)
+    start_sphere.translate(start)
+    start_sphere.paint_uniform_color([0, 0, 1])  # 蓝色
 
-    # 设置图表参数
-    ax.set_title('3D模型路径规划')
-    ax.set_xlabel('X轴')
-    ax.set_ylabel('Y轴')
-    ax.set_zlabel('Z轴')
-    ax.legend()
+    end_sphere = o3d.geometry.TriangleMesh.create_sphere(radius=1.0)
+    end_sphere.translate(end)
+    end_sphere.paint_uniform_color([0, 1, 0])  # 绿色
 
-    plt.tight_layout()
-    plt.show()
+    # 创建路径点的小球
+    path_spheres = []
+    for i in range(0, len(path_array), max(1, len(path_array) // 20)):
+        sphere = o3d.geometry.TriangleMesh.create_sphere(radius=0.5)
+        sphere.translate(path_array[i])
+        sphere.paint_uniform_color([1, 1, 0])
+        path_spheres.append(sphere)
 
+    # 显示所有几何体
+    geometries = [o3d_mesh, path_lines, start_sphere, end_sphere] + path_spheres
+    if smooth_lines is not None:
+        geometries.append(smooth_lines)
+
+    # 如果有碰撞点，显示它们
+    if collision_points and len(collision_points) > 0:
+        for i, start_pt, end_pt in collision_points:
+            # 创建红色球体标记碰撞点
+            collision_sphere1 = o3d.geometry.TriangleMesh.create_sphere(radius=0.8)
+            collision_sphere1.translate(start_pt)
+            collision_sphere1.paint_uniform_color([1, 0, 0])  # 红色
+
+            collision_sphere2 = o3d.geometry.TriangleMesh.create_sphere(radius=0.8)
+            collision_sphere2.translate(end_pt)
+            collision_sphere2.paint_uniform_color([1, 0, 0])  # 红色
+
+            # 添加到几何体列表
+            geometries.extend([collision_sphere1, collision_sphere2])
+
+    # 设置渲染选项并显示
+    o3d.visualization.draw_geometries(
+        geometries,
+        window_name="3D Model Path Planning",
+        width=1024,
+        height=768,
+        point_show_normal=False,
+        mesh_show_wireframe=True,
+        mesh_show_back_face=False,
+    )
 
 def set_matplotlib_chinese_font():
     """设置Matplotlib支持中文显示"""
@@ -459,11 +565,12 @@ if __name__ == "__main__":
     # 设置matplotlib支持中文
     set_matplotlib_chinese_font()
 
+    # 增加安全边距以更容易检测碰撞
     path = create_path_between_points(
         model_path,
         start_point,
         end_point,
-        collision_safety_margin=0.01,
+        collision_safety_margin=0.5,  # 增加安全边距
         visualize=True
     )
 
