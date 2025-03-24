@@ -523,37 +523,6 @@ def visualize_with_open3d(mesh, start, end, original_path, smoothed_path=None, c
         mesh_show_back_face=False,
     )
 
-def set_matplotlib_chinese_font():
-    """设置Matplotlib支持中文显示"""
-    import matplotlib.pyplot as plt
-    import matplotlib as mpl
-    import platform
-
-    system = platform.system()
-
-    # 针对不同操作系统设置合适的中文字体
-    if system == "Windows":
-        # Windows系统
-        font_family = ['Microsoft YaHei', 'SimHei', 'sans-serif']  # 微软雅黑和黑体
-    elif system == "Darwin":
-        # macOS系统
-        font_family = ['PingFang SC', 'STHeiti', 'sans-serif']  # 苹方和华文黑体
-    else:
-        # Linux系统
-        font_family = ['WenQuanYi Micro Hei', 'Noto Sans CJK SC', 'sans-serif']
-
-    # 更新matplotlib配置
-    plt.rcParams['font.family'] = font_family
-    plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
-
-    # 检查字体是否正确加载
-    try:
-        mpl.font_manager._rebuild()
-        print("已设置中文字体:", font_family[0])
-    except:
-        print("警告: 无法重建字体缓存，可能需要手动安装中文字体")
-
-
 # 使用示例
 if __name__ == "__main__":
 
@@ -561,9 +530,6 @@ if __name__ == "__main__":
     model_path = r"C:\Users\mi\Downloads\Three-Dimension-3D\models\pc\0\terra_obj\Block\Block.obj"
     start_point = np.array([78.56310916, 29.99410818, -162.10114156])  # 替换为实际坐标
     end_point = np.array([83.32050134, 42.84368528, -164.97868412])  # 替换为实际坐标
-
-    # 设置matplotlib支持中文
-    set_matplotlib_chinese_font()
 
     # 增加安全边距以更容易检测碰撞
     path = create_path_between_points(
