@@ -76,7 +76,7 @@ def create_path_between_points(mesh_path, start_point, end_point,
     for i, vertex in enumerate(vertices):
         graph.add_node(i, position=vertex)
 
-    # 添加所有边，使用网格的边连接信息，并在添加前进行碰撞检测
+    # 添加所有边，使用网格的边连接信息
     if hasattr(mesh, 'edges_unique'):
         edges = mesh.edges_unique
     else:
@@ -88,16 +88,10 @@ def create_path_between_points(mesh_path, start_point, end_point,
                 edges.add(edge)
         edges = list(edges)
 
-    # 记录碰撞边数量
-    collision_edges_count = 0
     for edge in edges:
         v1, v2 = edge
         # 计算边的长度作为权重
         weight = np.linalg.norm(vertices[v1] - vertices[v2])
-
-        # 在添加边之前检查碰撞
-        # 这里我们不检查网格自身的边，因为它们是网格表面的一部分
-        # 我们只是防止后面添加的额外边（如连接不同组件）穿过障碍物
         graph.add_edge(v1, v2, weight=weight)
 
     # 5. 分析图的连通性
@@ -173,15 +167,8 @@ def create_path_between_points(mesh_path, start_point, end_point,
                     distances.sort()
                     for d, j, rep_j in distances[:n_connections]:
                         if d <= max_connection_distance:
-                            # 在添加额外连接前检查碰撞
-                            v1 = vertices[rep_i]
-                            v2 = vertices[rep_j]
-                            if not ray_collision_check(mesh, v1, v2, collision_safety_margin):
-                                print(f"连接组件 {i} 到 {j}, 距离: {d:.2f}")
-                                graph.add_edge(rep_i, rep_j, weight=d)
-                            else:
-                                print(f"跳过从组件 {i} 到 {j} 的碰撞连接")
-                                collision_edges_count += 1
+                            print(f"连接组件 {i} 到 {j}, 距离: {d:.2f}")
+                            graph.add_edge(rep_i, rep_j, weight=d)
 
                 # 检查起点和终点现在是否连通
                 if nx.has_path(graph, start_idx, end_idx):
@@ -190,17 +177,10 @@ def create_path_between_points(mesh_path, start_point, end_point,
                     # 最后的尝试：直接连接起点和终点
                     direct_distance = np.linalg.norm(start_vertex - end_vertex)
                     if direct_distance <= max_connection_distance:
-                        # 检查直接连接是否会穿过障碍物
-                        if not ray_collision_check(mesh, start_vertex, end_vertex, collision_safety_margin):
-                            print(f"直接连接起点和终点，距离: {direct_distance:.2f}")
-                            graph.add_edge(start_idx, end_idx, weight=direct_distance)
-                        else:
-                            print("直接连接起点和终点会穿过障碍物，跳过")
-                            collision_edges_count += 1
+                        print(f"直接连接起点和终点，距离: {direct_distance:.2f}")
+                        graph.add_edge(start_idx, end_idx, weight=direct_distance)
 
-    print(f"在连接组件过程中跳过了 {collision_edges_count} 个会导致碰撞的边")
-
-    # 7. 使用A*算法找到路径，考虑碰撞检测
+    # 7. 使用A*算法找到路径
     print("使用A*算法规划路径...")
     try:
         # 定义启发式函数
@@ -212,7 +192,6 @@ def create_path_between_points(mesh_path, start_point, end_point,
         if not nx.has_path(graph, start_idx, end_idx):
             raise nx.NetworkXNoPath("起点和终点之间没有路径")
 
-        # 使用 A* 找路径
         path_indices = nx.astar_path(graph, start_idx, end_idx, heuristic)
         print(f"找到路径，长度: {len(path_indices)}个点")
 
@@ -228,7 +207,54 @@ def create_path_between_points(mesh_path, start_point, end_point,
 
         return None
 
-    # 8. 平滑路径并确保无碰撞
+    # 8. 碰撞检测
+    print("进行碰撞检测...")
+    collision_points = []
+
+    for i in range(len(path_indices) - 1):
+        v1 = vertices[path_indices[i]]
+        v2 = vertices[path_indices[i + 1]]
+
+        # 使用更精确的碰撞检测
+        if ray_collision_check(mesh, v1, v2, collision_safety_margin):
+            print(f"检测到碰撞在路径段 {i} 到 {i + 1}")
+            collision_points.append((i, v1, v2))
+
+    if collision_points:
+        print(f"发现 {len(collision_points)} 个碰撞点")
+
+        # 处理碰撞点 - 简单方法是从路径中移除碰撞段
+        if len(collision_points) < len(path_indices) - 1:  # 确保不会移除所有路径
+            new_path_indices = []
+            skip_mode = False
+
+            for i in range(len(path_indices)):
+                if i < len(path_indices) - 1:
+                    # 检查当前边是否是碰撞边
+                    is_collision_edge = any(cp[0] == i for cp in collision_points)
+
+                    if is_collision_edge:
+                        skip_mode = True
+                    elif skip_mode:
+                        skip_mode = False
+                        new_path_indices.append(path_indices[i])
+                    else:
+                        new_path_indices.append(path_indices[i])
+                else:
+                    # 总是保留最后一个点
+                    new_path_indices.append(path_indices[i])
+
+            path_indices = new_path_indices
+            print(f"移除碰撞段后的路径长度: {len(path_indices)}")
+
+            # 重新提取路径顶点
+            path_vertices = [vertices[idx] for idx in path_indices]
+        else:
+            print("警告: 所有路径段都存在碰撞，无法简单修复")
+    else:
+        print("路径无碰撞")
+
+    # 9. 平滑路径
     if len(path_indices) > 2:
         print("平滑路径...")
         # 这里可以实现更复杂的路径平滑算法
@@ -236,16 +262,8 @@ def create_path_between_points(mesh_path, start_point, end_point,
     else:
         final_path = path_vertices
 
-    # 9. 可视化
+    # 10. 可视化
     if visualize:
-        # 收集平滑前后路径中的碰撞点进行可视化
-        collision_points = []
-        for i in range(len(path_vertices) - 1):
-            v1 = path_vertices[i]
-            v2 = path_vertices[i + 1]
-            if ray_collision_check(mesh, v1, v2, collision_safety_margin):
-                collision_points.append((i, v1, v2))
-
         visualize_with_open3d(mesh, start_vertex, end_vertex, path_vertices, final_path, collision_points)
 
     return final_path
@@ -299,7 +317,6 @@ def ray_collision_check(mesh, start_point, end_point, safety_margin=0.01):
 
     return False  # 未检测到碰撞
 
-
 def smooth_path(path, mesh, safety_margin=0.01, iterations=2):
     """
     使用移动平均和直线可行性检查来平滑路径
@@ -328,12 +345,27 @@ def smooth_path(path, mesh, safety_margin=0.01, iterations=2):
             # 加权平均 (0.5 当前点, 0.25 前一点, 0.25 后一点)
             avg = current * 0.5 + prev * 0.25 + next_pt * 0.25
 
-            # 检查平滑点与前后点的连线是否会导致碰撞
-            collision_with_prev = ray_collision_check(mesh, prev, avg, safety_margin)
-            collision_with_next = ray_collision_check(mesh, avg, next_pt, safety_margin)
+            # 检查平滑点是否会导致碰撞
+            collision = False
+            for neighbor in [prev, next_pt]:
+                ray_origin = avg
+                ray_direction = neighbor - avg
+                ray_length = np.linalg.norm(ray_direction)
+
+                if ray_length > 0:
+                    ray_direction = ray_direction / ray_length
+                    try:
+                        hits = mesh.ray.intersects_any(
+                            ray_origins=[ray_origin + ray_direction * safety_margin],
+                            ray_directions=[ray_direction]
+                        )
+                        collision = collision or any(hits)
+                    except (AttributeError, ValueError):
+                        # 如果无法进行射线检测，保守地假设无碰撞
+                        pass
 
             # 如果平滑点会导致碰撞，保留原始点
-            if collision_with_prev or collision_with_next:
+            if collision:
                 new_path.append(smoothed[i])
             else:
                 new_path.append(avg)
@@ -341,30 +373,37 @@ def smooth_path(path, mesh, safety_margin=0.01, iterations=2):
         new_path.append(smoothed[-1])  # 保持终点不变
         smoothed = new_path
 
-    # 尝试通过跳过中间点来优化路径，同时确保无碰撞
-    optimized_path = [smoothed[0]]
-    i = 0
-    while i < len(smoothed) - 1:
-        current = smoothed[i]
+        # 跳过冗余点
+        i = 0
+        while i < len(smoothed) - 2:
+            # 如果三个连续点几乎共线，可以去掉中间点
+            v1 = smoothed[i + 1] - smoothed[i]
+            v2 = smoothed[i + 2] - smoothed[i + 1]
+            len1 = np.linalg.norm(v1)
+            len2 = np.linalg.norm(v2)
 
-        # 尝试从当前点直接连接到后面的点，跳过中间点
-        max_skip = min(5, len(smoothed) - i - 1)  # 最多尝试跳过5个点
-        skip_to = i + 1  # 默认连接到下一个点
+            if len1 > 0 and len2 > 0:
+                cosine = np.dot(v1, v2) / (len1 * len2)
+                if cosine > 0.99:  # 几乎共线 (cos(~8°) ≈ 0.99)
+                    # 检查直接连接是否可行
+                    direct = smoothed[i + 2] - smoothed[i]
+                    direct_len = np.linalg.norm(direct)
+                    if direct_len > 0:
+                        direct_norm = direct / direct_len
+                        try:
+                            hits = mesh.ray.intersects_any(
+                                ray_origins=[smoothed[i] + direct_norm * safety_margin],
+                                ray_directions=[direct_norm]
+                            )
+                            if not any(hits):
+                                # 可以安全地移除中间点
+                                smoothed.pop(i + 1)
+                                continue
+                        except (AttributeError, ValueError):
+                            pass
+            i += 1
 
-        for j in range(i + 2, i + max_skip + 1):
-            if j < len(smoothed):
-                # 检查从当前点到尝试跳过后的点是否有碰撞
-                if not ray_collision_check(mesh, current, smoothed[j], safety_margin):
-                    skip_to = j  # 可以安全地跳到这个点
-                else:
-                    break  # 一旦发现碰撞，停止尝试更远的点
-
-        # 添加找到的可以跳到的点
-        optimized_path.append(smoothed[skip_to])
-        i = skip_to  # 从跳到的点继续处理
-
-    return optimized_path
-
+    return smoothed
 
 def visualize_no_path(mesh, start, end, connected_components, vertices):
     """可视化网格、起点、终点和连通分量"""
@@ -484,6 +523,37 @@ def visualize_with_open3d(mesh, start, end, original_path, smoothed_path=None, c
         mesh_show_back_face=False,
     )
 
+def set_matplotlib_chinese_font():
+    """设置Matplotlib支持中文显示"""
+    import matplotlib.pyplot as plt
+    import matplotlib as mpl
+    import platform
+
+    system = platform.system()
+
+    # 针对不同操作系统设置合适的中文字体
+    if system == "Windows":
+        # Windows系统
+        font_family = ['Microsoft YaHei', 'SimHei', 'sans-serif']  # 微软雅黑和黑体
+    elif system == "Darwin":
+        # macOS系统
+        font_family = ['PingFang SC', 'STHeiti', 'sans-serif']  # 苹方和华文黑体
+    else:
+        # Linux系统
+        font_family = ['WenQuanYi Micro Hei', 'Noto Sans CJK SC', 'sans-serif']
+
+    # 更新matplotlib配置
+    plt.rcParams['font.family'] = font_family
+    plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
+
+    # 检查字体是否正确加载
+    try:
+        mpl.font_manager._rebuild()
+        print("已设置中文字体:", font_family[0])
+    except:
+        print("警告: 无法重建字体缓存，可能需要手动安装中文字体")
+
+
 # 使用示例
 if __name__ == "__main__":
 
@@ -491,6 +561,9 @@ if __name__ == "__main__":
     model_path = r"C:\Users\mi\Downloads\Three-Dimension-3D\models\pc\0\terra_obj\Block\Block.obj"
     start_point = np.array([78.56310916, 29.99410818, -162.10114156])  # 替换为实际坐标
     end_point = np.array([83.32050134, 42.84368528, -164.97868412])  # 替换为实际坐标
+
+    # 设置matplotlib支持中文
+    set_matplotlib_chinese_font()
 
     # 增加安全边距以更容易检测碰撞
     path = create_path_between_points(
@@ -503,6 +576,7 @@ if __name__ == "__main__":
 
     if path is not None:
         print(f"最终路径包含 {len(path)} 个点")
+        print(f"最终路径包含 {path} 个点")
         # 可以保存路径数据
         np.savetxt('path.csv', path, delimiter=',', header='x,y,z')
         print("路径已保存到 path.csv")
