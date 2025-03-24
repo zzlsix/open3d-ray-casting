@@ -1,9 +1,8 @@
-import trimesh
+import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
+import trimesh
 from scipy.spatial import KDTree
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
 
 
 def create_path_between_points(mesh_path, start_point, end_point,
