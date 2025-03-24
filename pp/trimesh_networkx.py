@@ -118,20 +118,25 @@ def create_path_between_points(mesh_path, start_point, end_point,
         if connect_components:
             print("尝试连接不同的连通分量...")
 
+            # 预先为每个顶点创建一个组件索引映射，避免重复循环
+            vertex_to_component = {}
+            for i, component in enumerate(connected_components):
+                for vertex_idx in component:
+                    vertex_to_component[vertex_idx] = i
+
             # 策略1: 尝试不同的起点和终点候选
             found_connection = False
             for s_idx in start_indices:
-                for e_idx in end_indices:
-                    # 找出这些点所在的连通分量
-                    s_comp = None
-                    e_comp = None
-                    for i, component in enumerate(connected_components):
-                        if s_idx in component:
-                            s_comp = i
-                        if e_idx in component:
-                            e_comp = i
+                s_comp = vertex_to_component.get(s_idx)
+                if s_comp is None:
+                    continue
 
-                    if s_comp == e_comp and s_comp is not None:
+                for e_idx in end_indices:
+                    e_comp = vertex_to_component.get(e_idx)
+                    if e_comp is None:
+                        continue
+
+                    if s_comp == e_comp:
                         print(f"找到在同一连通分量的替代起点 {s_idx} 和终点 {e_idx}")
                         start_idx = s_idx
                         end_idx = e_idx
@@ -139,6 +144,7 @@ def create_path_between_points(mesh_path, start_point, end_point,
                         end_vertex = vertices[end_idx]
                         found_connection = True
                         break
+
                 if found_connection:
                     break
 
@@ -146,29 +152,47 @@ def create_path_between_points(mesh_path, start_point, end_point,
             if not found_connection:
                 print("添加连通分量之间的连接...")
 
-                # 为每个组件计算一个中心点
+                # 为每个组件计算一个中心点（预计算并缓存）
                 component_centers = []
                 for component in connected_components:
-                    comp_vertices = [vertices[i] for i in component]
+                    # 使用numpy向量化操作计算中心点
+                    comp_vertices_indices = np.array(list(component))
+                    comp_vertices = vertices[comp_vertices_indices]
                     center = np.mean(comp_vertices, axis=0)
                     component_centers.append((center, list(component)[0]))  # 中心和一个代表点
 
-                # 连接所有组件到其最近的N个组件
-                n_connections = min(3, len(connected_components))
-                for i, (center_i, rep_i) in enumerate(component_centers):
-                    # 计算到其他中心的距离
-                    distances = []
-                    for j, (center_j, rep_j) in enumerate(component_centers):
-                        if i != j:
-                            dist = np.linalg.norm(center_i - center_j)
-                            distances.append((dist, j, rep_j))
+                # 使用numpy向量化操作计算距离矩阵
+                centers_array = np.array([center for center, _ in component_centers])
+                reps_array = np.array([rep for _, rep in component_centers])
 
-                    # 连接到最近的N个组件
-                    distances.sort()
-                    for d, j, rep_j in distances[:n_connections]:
-                        if d <= max_connection_distance:
-                            print(f"连接组件 {i} 到 {j}, 距离: {d:.2f}")
-                            graph.add_edge(rep_i, rep_j, weight=d)
+                n_connections = min(3, len(connected_components))
+
+                # 一次性计算所有组件对之间的距离
+                for i in range(len(component_centers)):
+                    # 向量化计算当前中心到所有其他中心的距离
+                    center_i = centers_array[i]
+                    diffs = centers_array - center_i
+                    distances = np.linalg.norm(diffs, axis=1)
+
+                    # 创建索引、距离和代表点的数组
+                    indices = np.arange(len(component_centers))
+                    valid_indices = indices != i  # 排除自身
+
+                    valid_distances = distances[valid_indices]
+                    valid_j_indices = indices[valid_indices]
+                    valid_reps = reps_array[valid_indices]
+
+                    # 找出最近的N个组件
+                    if len(valid_distances) > 0:
+                        nearest_indices = np.argsort(valid_distances)[:n_connections]
+                        for idx in nearest_indices:
+                            d = valid_distances[idx]
+                            j = valid_j_indices[idx]
+                            rep_j = valid_reps[idx]
+
+                            if d <= max_connection_distance:
+                                print(f"连接组件 {i} 到 {j}, 距离: {d:.2f}")
+                                graph.add_edge(component_centers[i][1], rep_j, weight=d)
 
                 # 检查起点和终点现在是否连通
                 if nx.has_path(graph, start_idx, end_idx):
@@ -179,7 +203,6 @@ def create_path_between_points(mesh_path, start_point, end_point,
                     if direct_distance <= max_connection_distance:
                         print(f"直接连接起点和终点，距离: {direct_distance:.2f}")
                         graph.add_edge(start_idx, end_idx, weight=direct_distance)
-
     # 7. 使用A*算法找到路径
     print("使用A*算法规划路径...")
     try:
