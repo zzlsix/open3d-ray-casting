@@ -1,10 +1,10 @@
 # quick start
-在[reference](#reference)中下载大疆官方示模型，[main.py](main.py)文件中修改 `MODEL_PATH` 变量为模型路径，运行即可  
+在[reference](#reference)中下载大疆官方示模型，[main.py](select_point/main.py)文件中修改 `MODEL_PATH` 变量为模型路径，运行即可  
 
 注意：
 + `MODEL_PATH` 的值修改为本地`.obj`3D模型文件的路径
 + 路径最好不要有中文，否则可能不兼容，出现解码错误
-+ 鼠标点击右键即可生成模型坐标，具体参考[`handle_mouse_click`](main.py)方法
++ 鼠标点击右键即可生成模型坐标，具体参考[`handle_mouse_click`](select_point/main.py)方法
 
 # dependence
 ```python
