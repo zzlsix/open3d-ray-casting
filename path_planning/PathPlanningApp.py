@@ -1,6 +1,7 @@
 from path_planning.ModelProcessor import ModelProcessor
 from path_planning.PathPlanner import PathPlanner
 from path_planning.Visualizer import Visualizer
+from path_planning.algorithm.RRTAlgorithm import RRTAlgorithm
 
 
 # 应用主控制器
@@ -22,7 +23,7 @@ class PathPlanningApp:
         occupied_voxels, bounds = self.model_processor.voxelize_mesh(mesh, voxel_size)
 
         # 4. 创建路径规划器并寻找路径
-        path_planner = PathPlanner(mesh, occupied_voxels, voxel_size, bounds)
+        path_planner = PathPlanner(mesh, occupied_voxels, voxel_size, bounds, RRTAlgorithm())
 
         print(f"原始起点: {start_point}")
         print(f"原始终点: {goal_point}")

@@ -8,14 +8,17 @@ from path_planning.algorithm.AStarAlgorithm import AStarAlgorithm
 
 # 路径规划模块
 class PathPlanner:
-    def __init__(self, mesh, occupied_voxels, voxel_size, bounds=None, algorithm=None):
+    def __init__(self, mesh, occupied_voxels, voxel_size, bounds=None, algorithm=AStarAlgorithm()):
         self.mesh = mesh
         self.occupied_voxels = occupied_voxels
         self.voxel_size = voxel_size
         self.bounds = bounds
         self.geometry_tools = GeometryTools()
         # 默认使用A*算法
-        self.algorithm = algorithm if algorithm else AStarAlgorithm()
+        self.algorithm = algorithm
+
+    def get_bounds(self):
+        return self.bounds
 
     def set_algorithm(self, algorithm):
         """设置路径规划算法"""
@@ -61,33 +64,9 @@ class PathPlanner:
 
     def find_path(self, start, goal):
         """使用当前设置的算法寻找从起点到终点的路径"""
-        # 处理起点和终点，确保它们在表面外部
-        safe_start = GeometryTools.find_nearest_surface_point(self.mesh, start)
-        safe_goal = GeometryTools.find_nearest_surface_point(self.mesh, goal)
-
-        print(f"处理后的起点: {safe_start}")
-        print(f"处理后的终点: {safe_goal}")
-
-        # 调整起点和终点，确保不在障碍物内
-        safe_start, start_adjusted = self.adjust_point_if_in_collision(safe_start)
-        safe_goal, goal_adjusted = self.adjust_point_if_in_collision(safe_goal)
-
-        # 如果仍然无法找到有效的起点或终点
-        if self.is_collision(safe_start):
-            print("错误：无法找到有效的起点")
-            return None
-
-        if self.is_collision(safe_goal):
-            print("错误：无法找到有效的终点")
-            return None
-
-        # 转换为网格坐标
-        start_grid = self.to_grid(safe_start)
-        goal_grid = self.to_grid(safe_goal)
-
         # 使用选定的算法查找路径
         start_time = time.time()
-        path = self.algorithm.find_path(start_grid, goal_grid, self)
+        path = self.algorithm.find_path(start, goal, self)
         end_time = time.time()
         print(f"找到路径！用时: {end_time - start_time:.2f}秒")
 
