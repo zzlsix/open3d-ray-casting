@@ -1,21 +1,24 @@
-import heapq
-import time
-from collections import defaultdict
-
 import numpy as np
 import trimesh
 
 from path_planning.GeometryTools import GeometryTools
+from path_planning.algorithm.AStarAlgorithm import AStarAlgorithm
 
 
 # 路径规划模块
 class PathPlanner:
-    def __init__(self, mesh, occupied_voxels, voxel_size, bounds=None):
+    def __init__(self, mesh, occupied_voxels, voxel_size, bounds=None, algorithm=None):
         self.mesh = mesh
         self.occupied_voxels = occupied_voxels
         self.voxel_size = voxel_size
         self.bounds = bounds
         self.geometry_tools = GeometryTools()
+        # 默认使用A*算法
+        self.algorithm = algorithm if algorithm else AStarAlgorithm()
+
+    def set_algorithm(self, algorithm):
+        """设置路径规划算法"""
+        self.algorithm = algorithm
 
     def to_grid(self, point):
         """将连续坐标转换为离散网格坐标"""
@@ -56,7 +59,7 @@ class PathPlanner:
         return point, False
 
     def find_path(self, start, goal):
-        """使用A*算法寻找从起点到终点的路径"""
+        """使用当前设置的算法寻找从起点到终点的路径"""
         # 处理起点和终点，确保它们在表面外部
         safe_start = GeometryTools.find_nearest_surface_point(self.mesh, start)
         safe_goal = GeometryTools.find_nearest_surface_point(self.mesh, goal)
@@ -77,97 +80,18 @@ class PathPlanner:
             print("错误：无法找到有效的终点")
             return None
 
+        # 转换为网格坐标
         start_grid = self.to_grid(safe_start)
         goal_grid = self.to_grid(safe_goal)
 
-        print(f"开始A*搜索，从 {safe_start} 到 {safe_goal}")
-        start_time = time.time()
+        # 使用选定的算法查找路径
+        path = self.algorithm.find_path(start_grid, goal_grid, self)
 
-        # A*算法初始化
-        open_set = []
-        heapq.heappush(open_set, (0, start_grid))
+        # 如果找到路径，添加真正的目标点
+        if path:
+            path.append(goal)
 
-        came_from = {}
-        g_score = defaultdict(lambda: float('inf'))
-        g_score[start_grid] = 0
-
-        f_score = defaultdict(lambda: float('inf'))
-        f_score[start_grid] = GeometryTools.heuristic(start_grid, goal_grid)
-
-        open_set_hash = {start_grid}
-        visited_count = 0
-
-        # A*主循环
-        while open_set:
-            # 获取f值最小的节点
-            current_f, current = heapq.heappop(open_set)
-            open_set_hash.remove(current)
-            visited_count += 1
-
-            # 定期显示进度
-            if visited_count % 1000 == 0:
-                print(f"已探索 {visited_count} 个节点...")
-
-            # 达到目标
-            if current == goal_grid:
-                path = []
-                while current in came_from:
-                    path.append(self.to_world(current))
-                    current = came_from[current]
-                path.append(safe_start)
-                path.reverse()
-
-                # 在路径末尾添加真正的目标点
-                path.append(goal)
-
-                end_time = time.time()
-                print(f"找到路径！用时: {end_time - start_time:.2f}秒")
-                print(f"路径长度: {len(path)}个点")
-                print(f"探索节点数: {visited_count}")
-                return path
-
-            # 检查所有邻居
-            for neighbor_grid in [
-                (current[0] + dx, current[1] + dy, current[2] + dz)
-                for dx in [-1, 0, 1]
-                for dy in [-1, 0, 1]
-                for dz in [-1, 0, 1]
-                if not (dx == 0 and dy == 0 and dz == 0)
-            ]:
-                # 检查邻居点是否合法
-                neighbor_world = self.to_world(neighbor_grid)
-
-                if not self.is_within_bounds(neighbor_world) or self.is_collision(neighbor_world):
-                    continue
-
-                # 计算到达邻居的代价
-                dx, dy, dz = abs(current[0] - neighbor_grid[0]), abs(current[1] - neighbor_grid[1]), abs(
-                    current[2] - neighbor_grid[2])
-
-                if dx + dy + dz == 1:  # 直线移动
-                    move_cost = self.voxel_size
-                elif dx + dy + dz == 2:  # 面对角线
-                    move_cost = 1.414 * self.voxel_size  # √2
-                else:  # 体对角线
-                    move_cost = 1.732 * self.voxel_size  # √3
-
-                tentative_g = g_score[current] + move_cost
-
-                # 如果找到更好的路径
-                if tentative_g < g_score[neighbor_grid]:
-                    came_from[neighbor_grid] = current
-                    g_score[neighbor_grid] = tentative_g
-                    f_score[neighbor_grid] = tentative_g + GeometryTools.heuristic(neighbor_grid, goal_grid)
-
-                    if neighbor_grid not in open_set_hash:
-                        heapq.heappush(open_set, (f_score[neighbor_grid], neighbor_grid))
-                        open_set_hash.add(neighbor_grid)
-
-        # 如果没有找到路径
-        end_time = time.time()
-        print(f"没有找到路径。用时: {end_time - start_time:.2f}秒")
-        print(f"探索节点数: {visited_count}")
-        return None
+        return path
 
     def post_process_path(self, path, original_start, original_end):
         """将路径点投影到表面附近"""
