@@ -11,7 +11,6 @@ class AStarAlgorithm(PathPlanningAlgorithm):
     def find_path(self, start_grid, goal_grid, planner):
         """使用A*算法查找路径"""
         print(f"开始A*搜索，从网格坐标 {start_grid} 到 {goal_grid}")
-        start_time = time.time()
 
         # A*算法初始化
         open_set = []
@@ -47,8 +46,6 @@ class AStarAlgorithm(PathPlanningAlgorithm):
                 path.append(planner.to_world(start_grid))  # 添加起点
                 path.reverse()  # 反转路径顺序
 
-                end_time = time.time()
-                print(f"找到路径！用时: {end_time - start_time:.2f}秒")
                 print(f"路径长度: {len(path)}个点")
                 print(f"探索节点数: {visited_count}")
                 return path
@@ -76,9 +73,8 @@ class AStarAlgorithm(PathPlanningAlgorithm):
                         open_set_hash.add(neighbor_grid)
 
         # 如果没有找到路径
-        end_time = time.time()
-        print(f"没有找到路径。用时: {end_time - start_time:.2f}秒")
         print(f"探索节点数: {visited_count}")
+        print(f"没有找到路径")
         return None
 
     def _get_neighbors(self, current):

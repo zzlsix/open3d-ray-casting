@@ -1,3 +1,4 @@
+import time
 import numpy as np
 import trimesh
 
@@ -85,7 +86,10 @@ class PathPlanner:
         goal_grid = self.to_grid(safe_goal)
 
         # 使用选定的算法查找路径
+        start_time = time.time()
         path = self.algorithm.find_path(start_grid, goal_grid, self)
+        end_time = time.time()
+        print(f"找到路径！用时: {end_time - start_time:.2f}秒")
 
         # 如果找到路径，添加真正的目标点
         if path:
@@ -93,7 +97,7 @@ class PathPlanner:
 
         return path
 
-    def post_process_path(self, path, original_start, original_end, offset_distance = 0.1):
+    def post_process_path(self, path, original_start, original_end, offset_distance=0.1):
         """将路径点投影到表面附近"""
         if path is None:
             return None
