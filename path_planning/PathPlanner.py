@@ -93,7 +93,7 @@ class PathPlanner:
 
         return path
 
-    def post_process_path(self, path, original_start, original_end):
+    def post_process_path(self, path, original_start, original_end, offset_distance = 0.1):
         """将路径点投影到表面附近"""
         if path is None:
             return None
@@ -115,7 +115,7 @@ class PathPlanner:
             normal = self.mesh.face_normals[triangle_id[0]]
 
             # 将点移动到表面附近但不在表面上
-            offset_distance = 0.2  # 小偏移，让路径非常接近表面
+            # 小偏移，让路径非常接近表面
             projected_point = closest_point + normal * offset_distance
 
             processed_path.append(projected_point)
