@@ -1,6 +1,7 @@
 import heapq
+import numpy as np
+import trimesh
 from collections import defaultdict
-
 from path_planning.GeometryTools import GeometryTools
 from path_planning.algorithm.PathPlanningAlgorithm import PathPlanningAlgorithm
 
@@ -17,15 +18,15 @@ class AStarAlgorithm(PathPlanningAlgorithm):
         print(f"处理后的终点: {safe_goal}")
 
         # 调整起点和终点，确保不在障碍物内
-        safe_start, start_adjusted = planner.adjust_point_if_in_collision(safe_start)
-        safe_goal, goal_adjusted = planner.adjust_point_if_in_collision(safe_goal)
+        safe_start, start_adjusted = self.adjust_point_if_in_collision(safe_start, planner)
+        safe_goal, goal_adjusted = self.adjust_point_if_in_collision(safe_goal, planner)
 
         # 如果仍然无法找到有效的起点或终点
-        if planner.is_collision(safe_start):
+        if self.is_collision(safe_start, planner):
             print("错误：无法找到有效的起点")
             return None
 
-        if planner.is_collision(safe_goal):
+        if self.is_collision(safe_goal, planner):
             print("错误：无法找到有效的终点")
             return None
 
@@ -71,14 +72,15 @@ class AStarAlgorithm(PathPlanningAlgorithm):
 
                 print(f"路径长度: {len(path)}个点")
                 print(f"探索节点数: {visited_count}")
-                return path
+                process_path = self.post_process_path(planner.mesh, path, start, goal)
+                return process_path
 
             # 检查所有邻居
             for neighbor_grid in self._get_neighbors(current):
                 # 检查邻居点是否合法
                 neighbor_world = planner.to_world(neighbor_grid)
 
-                if not planner.is_within_bounds(neighbor_world) or planner.is_collision(neighbor_world):
+                if not planner.is_within_bounds(neighbor_world) or self.is_collision(neighbor_world, planner):
                     continue
 
                 # 计算到达邻居的代价
@@ -100,7 +102,8 @@ class AStarAlgorithm(PathPlanningAlgorithm):
         print(f"没有找到路径")
         return None
 
-    def _get_neighbors(self, current):
+    @staticmethod
+    def _get_neighbors(current):
         """获取当前网格点的所有邻居"""
         neighbors = []
         for dx in [-1, 0, 1]:
@@ -111,7 +114,8 @@ class AStarAlgorithm(PathPlanningAlgorithm):
                     neighbors.append((current[0] + dx, current[1] + dy, current[2] + dz))
         return neighbors
 
-    def _calculate_move_cost(self, current, neighbor, voxel_size):
+    @staticmethod
+    def _calculate_move_cost(current, neighbor, voxel_size):
         """计算从当前点到邻居点的移动代价"""
         dx = abs(current[0] - neighbor[0])
         dy = abs(current[1] - neighbor[1])
@@ -123,3 +127,57 @@ class AStarAlgorithm(PathPlanningAlgorithm):
             return 1.414 * voxel_size  # √2
         else:  # 体对角线
             return 1.732 * voxel_size  # √3
+
+    @staticmethod
+    def is_collision(point, planner):
+        """检查点是否与障碍物碰撞"""
+        return GeometryTools.is_point_in_voxels(point, planner.occupied_voxels, planner.voxel_size)
+
+    def adjust_point_if_in_collision(self, point, planner):
+        """如果点在障碍物内，尝试调整"""
+        if not self.is_collision(point, planner):
+            return point, False
+
+        print(f"警告：点在障碍物内，尝试小幅调整...")
+        for offset in [
+            (planner.voxel_size, 0, 0), (-planner.voxel_size, 0, 0),
+            (0, planner.voxel_size, 0), (0, -planner.voxel_size, 0),
+            (0, 0, planner.voxel_size), (0, 0, -planner.voxel_size)
+        ]:
+            new_point = tuple(np.array(point) + np.array(offset))
+            if not self.is_collision(new_point, planner):
+                print(f"点已调整为: {new_point}")
+                return new_point, True
+
+        return point, False
+
+    @staticmethod
+    def post_process_path(mesh, path, original_start, original_end, offset_distance=0.1):
+        """将路径点投影到表面附近"""
+        if path is None:
+            return None
+
+        # 保留原始起点和终点
+        processed_path = [original_start]
+
+        # 处理中间点 - 将它们投影到距离表面更近的位置
+        for i in range(1, len(path) - 1):
+            point = path[i]
+
+            # 计算点到网格的最近点
+            closest_point, distance, triangle_id = trimesh.proximity.closest_point(mesh, [point])
+            closest_point = closest_point[0]
+
+            # 计算表面法线
+            normal = mesh.face_normals[triangle_id[0]]
+
+            # 将点移动到表面附近但不在表面上
+            # 小偏移，让路径非常接近表面
+            projected_point = closest_point + normal * offset_distance
+
+            processed_path.append(projected_point)
+
+        # 添加原始终点
+        processed_path.append(original_end)
+
+        return processed_path
