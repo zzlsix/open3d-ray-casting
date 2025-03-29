@@ -128,31 +128,11 @@ class AStarAlgorithm(PathPlanningAlgorithm):
         else:  # 体对角线
             return 1.732 * voxel_size  # √3
 
-    @staticmethod
-    def is_collision(point, planner):
+    def is_collision(self, point, planner):
         """检查点是否与障碍物碰撞"""
         return GeometryTools.is_point_in_voxels(point, planner.occupied_voxels, planner.voxel_size)
 
-    def adjust_point_if_in_collision(self, point, planner):
-        """如果点在障碍物内，尝试调整"""
-        if not self.is_collision(point, planner):
-            return point, False
-
-        print(f"警告：点在障碍物内，尝试小幅调整...")
-        for offset in [
-            (planner.voxel_size, 0, 0), (-planner.voxel_size, 0, 0),
-            (0, planner.voxel_size, 0), (0, -planner.voxel_size, 0),
-            (0, 0, planner.voxel_size), (0, 0, -planner.voxel_size)
-        ]:
-            new_point = tuple(np.array(point) + np.array(offset))
-            if not self.is_collision(new_point, planner):
-                print(f"点已调整为: {new_point}")
-                return new_point, True
-
-        return point, False
-
-    @staticmethod
-    def post_process_path(mesh, path, original_start, original_end, offset_distance=0.1):
+    def post_process_path(self, mesh, path, original_start, original_end, offset_distance=0.1):
         """将路径点投影到表面附近"""
         if path is None:
             return None

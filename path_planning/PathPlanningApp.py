@@ -31,20 +31,16 @@ class PathPlanningApp:
         path = path_planner.find_path(start_point, goal_point)
 
         if path:
-            # 5. 后处理路径，使其更靠近表面
-            processed_path = path_planner.post_process_path(path, start_point, goal_point)
-
-            # 6. 显示和保存结果
-            self.visualizer.print_path(processed_path)
-            self.visualizer.save_path_to_file(processed_path)
+            self.visualizer.print_path(path)
+            self.visualizer.save_path_to_file(path)
 
             # 7. 可视化
             try:
-                self.visualizer.visualize_with_open3d(mesh, start_point, goal_point, processed_path)
+                self.visualizer.visualize_with_open3d(mesh, start_point, goal_point, path)
             except Exception as e:
                 print(f"无法生成可视化: {e}")
 
-            return processed_path
+            return path
         else:
             print("无法找到有效路径")
             return None
