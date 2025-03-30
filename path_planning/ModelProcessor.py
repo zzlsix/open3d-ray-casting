@@ -3,10 +3,9 @@ import trimesh
 
 # 模型加载和处理模块
 class ModelProcessor:
-    def __init__(self, mesh=None, voxel_size=0.1, voxel_visualize=False):
-        self.mesh = mesh
-        self.voxel_size = voxel_size
-        self.voxel_visualize = voxel_visualize
+    def __init__(self):
+        self.voxel_size = None
+        self.voxel_visualize = None
 
     def load_model(self, obj_file):
         """加载3D模型文件"""
@@ -24,28 +23,29 @@ class ModelProcessor:
         else:
             mesh = model
 
-        self.mesh = mesh
-
         return mesh
 
-    def voxelize_mesh(self):
+    def voxelize_mesh(self, mesh, voxel_size=1.0, voxel_visualize=False):
         """将网格体素化"""
         print(f"开始体素化...")
 
         # 计算模型边界
-        bounds = self.mesh.bounds
+        bounds = mesh.bounds
         print(f"模型边界: {bounds}")
         print(f"模型尺寸: {bounds[1] - bounds[0]}")
 
+        self.voxel_size = voxel_size
+
         # 体素化网格
-        voxel_grid = self.mesh.voxelized(pitch=self.voxel_size)
+        voxel_grid = mesh.voxelized(pitch=self.voxel_size)
+
+        self.voxel_visualize = voxel_visualize
 
         if self.voxel_visualize:
             # 将体素转换为立方体网格并可视化
             boxes_mesh = voxel_grid.as_boxes()
             boxes_mesh.show()
 
-        occupied_voxels = set(map(tuple, voxel_grid.points))
-        print(f"生成了 {len(occupied_voxels)} 个占用体素")
+        print(f"生成了 {len(voxel_grid.points)} 个占用体素")
 
-        return occupied_voxels, bounds
+        return voxel_grid

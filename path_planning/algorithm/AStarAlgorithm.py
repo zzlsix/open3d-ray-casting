@@ -130,7 +130,13 @@ class AStarAlgorithm(PathPlanningAlgorithm):
 
     def is_collision(self, point, planner):
         """检查点是否与障碍物碰撞"""
-        return GeometryTools.is_point_in_voxels(point, planner.occupied_voxels, planner.voxel_size)
+        # 性能不高，暂时优化，但准确率降低
+        # # 将点转换为numpy数组以确保兼容性
+        # point_array = np.asarray(point)
+        # return planner.voxel_grid.is_filled(point_array)
+
+        return planner.voxel_index.is_occupied(point)
+
 
     def post_process_path(self, mesh, path, original_start, original_end, offset_distance=0.1):
         """将路径点投影到表面附近"""

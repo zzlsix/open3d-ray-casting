@@ -53,13 +53,6 @@ class GeometryTools:
         return point
 
     @staticmethod
-    def is_point_in_voxels(point, occupied_voxels, voxel_size):
-        """检查点是否在占用体素中"""
-        grid_point = tuple(np.round(np.array(point) / voxel_size).astype(int))
-        world_point = tuple(np.array(grid_point) * voxel_size)
-        return world_point in occupied_voxels
-
-    @staticmethod
     def heuristic(a, b):
         """计算两点间的欧几里得距离"""
         return np.sqrt(sum((a[i] - b[i]) ** 2 for i in range(3)))
