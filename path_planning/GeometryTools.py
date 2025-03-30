@@ -51,8 +51,3 @@ class GeometryTools:
 
         # 如果点已经在外部，保持不变
         return point
-
-    @staticmethod
-    def heuristic(a, b):
-        """计算两点间的欧几里得距离"""
-        return np.sqrt(sum((a[i] - b[i]) ** 2 for i in range(3)))

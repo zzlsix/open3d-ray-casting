@@ -45,7 +45,7 @@ class AStarAlgorithm(PathPlanningAlgorithm):
         g_score[start_grid] = 0
 
         f_score = defaultdict(lambda: float('inf'))
-        f_score[start_grid] = GeometryTools.heuristic(start_grid, goal_grid)
+        f_score[start_grid] = self.heuristic(start_grid, goal_grid)
 
         open_set_hash = {start_grid}
         visited_count = 0
@@ -91,7 +91,7 @@ class AStarAlgorithm(PathPlanningAlgorithm):
                 if tentative_g < g_score[neighbor_grid]:
                     came_from[neighbor_grid] = current
                     g_score[neighbor_grid] = tentative_g
-                    f_score[neighbor_grid] = tentative_g + GeometryTools.heuristic(neighbor_grid, goal_grid)
+                    f_score[neighbor_grid] = tentative_g + self.heuristic(neighbor_grid, goal_grid)
 
                     if neighbor_grid not in open_set_hash:
                         heapq.heappush(open_set, (f_score[neighbor_grid], neighbor_grid))
@@ -101,6 +101,11 @@ class AStarAlgorithm(PathPlanningAlgorithm):
         print(f"探索节点数: {visited_count}")
         print(f"没有找到路径")
         return None
+
+    @staticmethod
+    def heuristic(a, b):
+        """计算两点间的欧几里得距离"""
+        return np.sqrt(sum((a[i] - b[i]) ** 2 for i in range(3))) * 1.5
 
     @staticmethod
     def _get_neighbors(current):
@@ -136,7 +141,6 @@ class AStarAlgorithm(PathPlanningAlgorithm):
         # return planner.voxel_grid.is_filled(point_array)
 
         return planner.voxel_index.is_occupied(point)
-
 
     def post_process_path(self, mesh, path, original_start, original_end, offset_distance=0.1):
         """将路径点投影到表面附近"""

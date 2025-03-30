@@ -1,4 +1,3 @@
-import numpy as np
 import open3d as o3d
 
 
@@ -14,18 +13,18 @@ class Visualizer:
         o3d_mesh.compute_vertex_normals()
 
         # 创建起点和终点球体
-        start_sphere = o3d.geometry.TriangleMesh.create_sphere(radius=1.0)
+        start_sphere = o3d.geometry.TriangleMesh.create_sphere(radius=0.1)
         start_sphere.translate(start)
         start_sphere.paint_uniform_color([0, 0, 1])  # 蓝色
 
-        end_sphere = o3d.geometry.TriangleMesh.create_sphere(radius=1.0)
+        end_sphere = o3d.geometry.TriangleMesh.create_sphere(radius=1)
         end_sphere.translate(end)
         end_sphere.paint_uniform_color([0, 1, 0])  # 绿色
 
         # 根据original_path创建路径点的小球
         path_spheres = []
         for point in original_path:
-            sphere = o3d.geometry.TriangleMesh.create_sphere(radius=0.1)
+            sphere = o3d.geometry.TriangleMesh.create_sphere(radius=0.05)
             sphere.translate(point)
             sphere.paint_uniform_color([1, 0, 0])  # 红色
             path_spheres.append(sphere)
