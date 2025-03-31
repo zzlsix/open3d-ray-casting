@@ -1,260 +1,207 @@
 import random
+
 import numpy as np
 
-from math import sqrt
-
+from path_planning.GeometryTools import GeometryTools
 from path_planning.algorithm.PathPlanningAlgorithm import PathPlanningAlgorithm
 
 
-# RRT算法实现
 class RRTAlgorithm(PathPlanningAlgorithm):
-    def __init__(self, max_iterations=20000, step_size=0.5, goal_sample_rate=0.2, search_radius=5.0):
-        """初始化RRT算法参数"""
+    def __init__(self, max_iterations=3000, step_size=0.9, goal_sample_rate=0.1, max_extend_length=1.0):
+        """
+        初始化RRT算法
+
+        参数:
+            max_iterations: 最大迭代次数
+            step_size: 每次扩展的步长
+            goal_sample_rate: 以目标点作为采样点的概率
+            max_extend_length: 最大扩展长度
+        """
         self.max_iterations = max_iterations
         self.step_size = step_size
         self.goal_sample_rate = goal_sample_rate
-        self.search_radius = search_radius  # 用于局部采样
+        self.max_extend_length = max_extend_length
 
-    def find_path(self, start_grid, goal_grid, planner):
-        """使用RRT算法查找路径"""
-        print(f"开始RRT搜索，从网格坐标 {start_grid} 到 {goal_grid}")
+    def find_path(self, start, goal, planner):
+        """
+        使用RRT算法查找从起点到终点的路径
 
-        # 转换为世界坐标
-        start_world = planner.to_world(start_grid)
-        goal_world = planner.to_world(goal_grid)
+        参数:
+            start: 世界坐标中的起点
+            goal: 世界坐标中的终点
+            planner: PathPlanner实例，提供环境信息和辅助方法
 
-        # 计算起点和终点之间的距离，用于自适应参数调整
-        start_to_goal_dist = np.linalg.norm(np.array(start_world) - np.array(goal_world))
-        print(f"起点到终点的直线距离: {start_to_goal_dist}")
+        返回:
+            路径点列表或None（如果未找到路径）
+        """
+        print("使用RRT算法寻找路径...")
 
-        # 根据起终点距离自适应调整步长
-        if start_to_goal_dist < 10:
-            self.step_size = min(0.3, start_to_goal_dist / 10)
-            print(f"短距离路径规划，调整步长为: {self.step_size}")
+        # 调整起点和终点，确保它们不在障碍物内
+        start, _ = self.adjust_point_if_in_collision(start, planner)
+        goal, _ = self.adjust_point_if_in_collision(goal, planner)
 
-        # RRT算法初始化
-        tree = {}  # {node: parent_node}
-        tree[start_grid] = None  # 根节点没有父节点
+        # 初始化RRT树
+        tree = {start: None}  # 节点: 父节点
 
-        # 使用两个树（双向RRT）可以加速收敛
-        forward_tree = {start_grid: None}  # 从起点出发的树
-        backward_tree = {goal_grid: None}  # 从终点出发的树
-        trees = [forward_tree, backward_tree]
-        current_tree_idx = 0  # 当前使用的树索引
+        # 自适应调整步长
+        self.step_size = min(planner.voxel_size * 3, self.step_size)
+        print(f"RRT步长设置为: {self.step_size}")
 
-        successful_iterations = 0  # 记录成功扩展的迭代次数
+        # 设置搜索边界
+        bounds = planner.get_bounds()
+        # 正确检查边界是否存在
+        if bounds is not None and isinstance(bounds, tuple) and len(bounds) == 2:
+            min_bounds = np.array(bounds[0])
+            max_bounds = np.array(bounds[1])
+        else:
+            # 如果没有明确的边界，根据起点和终点创建一个搜索空间
+            min_bounds = np.minimum(np.array(start), np.array(goal)) - 100
+            max_bounds = np.maximum(np.array(start), np.array(goal)) + 100
 
+        # 开始RRT迭代
         for i in range(self.max_iterations):
-            # 定期显示进度
-            if i % 500 == 0:
-                print(f"RRT迭代次数: {i}/{self.max_iterations}, 成功扩展: {successful_iterations}")
+            if i % 100 == 0:
+                print(f"RRT迭代: {i}/{self.max_iterations}")
 
-            # 切换树
-            current_tree = trees[current_tree_idx]
-            other_tree = trees[1 - current_tree_idx]
-
-            # 随机采样或朝目标采样
+            # 随机采样一个点
             if random.random() < self.goal_sample_rate:
-                # 目标引导采样：选择另一棵树的随机节点作为目标
-                other_nodes = list(other_tree.keys())
-                if other_nodes:
-                    random_grid = random.choice(other_nodes)
-                else:
-                    random_grid = goal_grid if current_tree_idx == 0 else start_grid
+                random_point = goal
             else:
-                # 采用混合采样策略
-                if random.random() < 0.7:  # 70%的概率使用局部采样
-                    # 从当前树中选择一个随机节点
-                    tree_nodes = list(current_tree.keys())
-                    if tree_nodes:
-                        base_node = random.choice(tree_nodes)
-                        # 在该节点附近进行局部采样
-                        random_grid = self._local_sample(base_node, planner)
-                    else:
-                        random_grid = self._random_state(planner)
-                else:  # 30%的概率使用全局采样
-                    random_grid = self._random_state(planner)
+                random_point = self.random_point(min_bounds, max_bounds)
 
-            random_world = planner.to_world(random_grid)
+            # 找到树中最近的节点
+            nearest_node = self.nearest_node(random_point, tree)
 
-            # 确保采样点在有效范围内且无碰撞
-            attempts = 0
-            while (not planner.is_within_bounds(random_world) or
-                   planner.is_collision(random_world)) and attempts < 20:
-                if random.random() < 0.5:  # 混合采样策略
-                    random_grid = self._local_sample(
-                        random.choice(list(current_tree.keys())),
-                        planner
-                    )
-                else:
-                    random_grid = self._random_state(planner)
-                random_world = planner.to_world(random_grid)
-                attempts += 1
+            # 从最近节点向随机点扩展
+            new_node = self.extend(nearest_node, random_point, planner)
 
-            if attempts >= 20:
-                continue  # 放弃当前迭代，尝试下一次
+            if new_node:
+                # 将新节点添加到树中
+                tree[new_node] = nearest_node
 
-            # 找到当前树中离随机点最近的节点
-            nearest_grid = self._nearest_neighbor(random_grid, current_tree)
+                # 检查是否可以连接到目标
+                if self.distance(new_node, goal) < self.max_extend_length:
+                    # 在find_path方法中
+                    if not self.is_path_collision(new_node, goal, planner):
+                        tree[goal] = new_node
+                        print(f"RRT找到路径，迭代次数: {i + 1}")
+                        return self.extract_path(tree, start, goal, planner)
 
-            # 从最近节点向随机点延伸一步
-            new_grid = self._steer(nearest_grid, random_grid)
-            new_world = planner.to_world(new_grid)
-
-            # 检查新节点是否有效且路径无碰撞
-            if (planner.is_within_bounds(new_world) and
-                    not planner.is_collision(new_world) and
-                    self._check_path(nearest_grid, new_grid, planner)):
-
-                # 将新节点添加到当前树中
-                current_tree[new_grid] = nearest_grid
-                successful_iterations += 1
-
-                # 查找另一棵树中离新节点最近的节点
-                nearest_in_other = self._nearest_neighbor(new_grid, other_tree)
-
-                # 尝试连接两棵树
-                if nearest_in_other and self._distance(new_grid, nearest_in_other) < self.step_size * 3:
-                    if self._check_path(new_grid, nearest_in_other, planner):
-                        print("找到路径！两棵树成功连接")
-
-                        # 构建路径
-                        path = self._construct_path(new_grid, nearest_in_other, forward_tree, backward_tree,
-                                                    current_tree_idx, planner)
-
-                        print(f"路径长度: {len(path)}个点")
-                        print(f"RRT迭代次数: {i + 1}, 成功扩展: {successful_iterations}")
-                        return path
-
-            # 交替使用两棵树
-            current_tree_idx = 1 - current_tree_idx
-
-        # 如果没有找到路径
-        print(f"RRT迭代次数: {self.max_iterations}, 成功扩展: {successful_iterations}")
-        print(f"没有找到路径")
+        print("RRT未能找到路径，达到最大迭代次数")
         return None
 
-    def _construct_path(self, node1, node2, forward_tree, backward_tree, current_tree_idx, planner):
-        """构建完整路径"""
-        if current_tree_idx == 0:  # 当前是前向树
-            forward_node = node1
-            backward_node = node2
-        else:  # 当前是后向树
-            forward_node = node2
-            backward_node = node1
+    def random_point(self, min_bounds, max_bounds):
+        """生成随机点"""
+        return tuple(random.uniform(min_bounds[i], max_bounds[i]) for i in range(3))
 
-        # 构建前向路径
-        forward_path = []
-        current = forward_node
-        while current is not None:
-            forward_path.append(planner.to_world(current))
-            current = forward_tree.get(current)
-        forward_path.reverse()  # 前向路径需要反转
+    def nearest_node(self, point, tree):
+        """找到树中离给定点最近的节点"""
+        return min(tree.keys(), key=lambda n: self.distance(n, point))
 
-        # 构建后向路径
-        backward_path = []
-        current = backward_node
-        while current is not None:
-            backward_path.append(planner.to_world(current))
-            current = backward_tree.get(current)
+    def distance(self, p1, p2):
+        """计算两点之间的欧氏距离"""
+        return np.linalg.norm(np.array(p1) - np.array(p2))
 
-        # 合并路径
-        return forward_path + backward_path
+    def extend(self, from_node, to_point, planner):
+        """改进的扩展策略"""
+        # 计算方向向量
+        direction = np.array(to_point) - np.array(from_node)
+        norm = np.linalg.norm(direction)
 
-    def _local_sample(self, base_grid, planner):
-        """在基准点附近进行局部采样"""
-        # 在搜索半径内随机采样
-        dx = random.uniform(-self.search_radius, self.search_radius)
-        dy = random.uniform(-self.search_radius, self.search_radius)
-        dz = random.uniform(-self.search_radius, self.search_radius)
+        if norm < 1e-6:  # 避免除零错误
+            return None
 
-        x = int(base_grid[0] + dx)
-        y = int(base_grid[1] + dy)
-        z = int(base_grid[2] + dz)
+        # 使用更小的步长
+        actual_step_size = min(self.step_size, norm, planner.voxel_size * 0.8)
+        direction = direction / norm * actual_step_size
 
-        return (x, y, z)
+        # 计算新节点
+        new_point = tuple(np.array(from_node) + direction)
 
-    def _random_state(self, planner):
-        """生成随机的网格坐标"""
-        # 获取环境边界
-        bounds = planner.get_bounds()
+        # 更严格的检查
+        if not planner.is_within_bounds(new_point):
+            return None
 
-        if bounds is None:
-            # 如果没有明确的边界，使用一个合理的默认范围
-            x = random.randint(-100, 100)
-            y = random.randint(-100, 100)
-            z = random.randint(-100, 100)
-        else:
-            # 将世界坐标边界转换为网格坐标
-            min_bound = planner.to_grid(bounds[0])
-            max_bound = planner.to_grid(bounds[1])
+        # 检查新点是否在障碍物内
+        if self.is_collision(new_point, planner):
+            return None
 
-            # 随机采样
-            x = random.randint(min_bound[0], max_bound[0])
-            y = random.randint(min_bound[1], max_bound[1])
-            z = random.randint(min_bound[2], max_bound[2])
+        # 检查路径是否有碰撞
+        if self.is_path_collision(from_node, new_point, planner):
+            return None
 
-        return (x, y, z)
+        return new_point
 
-    def _nearest_neighbor(self, target_grid, tree):
-        """找到树中离目标点最近的节点"""
-        min_dist = float('inf')
-        nearest = None
+    def is_collision(self, point, planner):
+        """改进的碰撞检测函数"""
+        return planner.voxel_index.is_occupied(point)
 
-        for node in tree.keys():
-            dist = self._distance(node, target_grid)
-            if dist < min_dist:
-                min_dist = dist
-                nearest = node
+    def is_path_collision(self, p1, p2, planner):
+        """增强的路径碰撞检测"""
+        # 计算两点之间的距离
+        dist = self.distance(p1, p2)
 
-        return nearest
+        # 更密集的采样
+        steps = max(10, int(dist / (planner.voxel_size * 0.25)))
 
-    def _distance(self, grid1, grid2):
-        """计算两个网格点之间的欧几里得距离"""
-        return sqrt((grid1[0] - grid2[0]) ** 2 +
-                    (grid1[1] - grid2[1]) ** 2 +
-                    (grid1[2] - grid2[2]) ** 2)
+        # 在路径上均匀采样点进行碰撞检测
+        for i in range(1, steps):
+            t = i / steps
+            interpolated_point = tuple(np.array(p1) * (1 - t) + np.array(p2) * t)
+            if self.is_collision(interpolated_point, planner):
+                return True
 
-    def _steer(self, from_grid, to_grid):
-        """从起点向目标点延伸一定距离"""
-        dist = self._distance(from_grid, to_grid)
+        return False
 
-        if dist <= self.step_size:
-            return to_grid
+    def extract_path(self, tree, start, goal, planner):
+        """从树中提取路径并进行后处理"""
+        path = [goal]
+        current = goal
 
-        # 计算单位向量
-        dx = (to_grid[0] - from_grid[0]) / dist
-        dy = (to_grid[1] - from_grid[1]) / dist
-        dz = (to_grid[2] - from_grid[2]) / dist
+        while current != start:
+            current = tree[current]
+            path.append(current)
 
-        # 沿该方向延伸step_size距离
-        new_x = int(from_grid[0] + dx * self.step_size)
-        new_y = int(from_grid[1] + dy * self.step_size)
-        new_z = int(from_grid[2] + dz * self.step_size)
+        path.reverse()
 
-        return (new_x, new_y, new_z)
+        # 路径后处理：确保所有点都远离障碍物
+        processed_path = []
+        for point in path:
+            adjusted_point, was_adjusted = self.adjust_point_if_in_collision(point, planner)
+            processed_path.append(adjusted_point)
 
-    def _check_path(self, from_grid, to_grid, planner):
-        """检查两点之间的路径是否无碰撞"""
-        # 获取两点间的一系列采样点
-        points = self._interpolate(from_grid, to_grid)
+        return processed_path
 
-        # 检查每个采样点是否无碰撞
-        for grid in points:
-            world = planner.to_world(grid)
-            if not planner.is_within_bounds(world) or planner.is_collision(world):
-                return False
+    def adjust_point_if_in_collision(self, point, planner):
+        """如果点在障碍物内，尝试调整"""
+        if not self.is_collision(point, planner):
+            return point, False
 
-        return True
+        print(f"警告：点在障碍物内，尝试小幅调整...")
+        for offset in [
+            (planner.voxel_size, 0, 0), (-planner.voxel_size, 0, 0),
+            (0, planner.voxel_size, 0), (0, -planner.voxel_size, 0),
+            (0, 0, planner.voxel_size), (0, 0, -planner.voxel_size)
+        ]:
+            new_point = tuple(np.array(point) + np.array(offset))
+            if not self.is_collision(new_point, planner):
+                print(f"点已调整为: {new_point}")
+                return new_point, True
 
-    def _interpolate(self, from_grid, to_grid, num_points=10):
-        """在两点之间进行线性插值以检查路径"""
-        points = []
-        for i in range(num_points + 1):
-            t = i / num_points
-            x = int(from_grid[0] + t * (to_grid[0] - from_grid[0]))
-            y = int(from_grid[1] + t * (to_grid[1] - from_grid[1]))
-            z = int(from_grid[2] + t * (to_grid[2] - from_grid[2]))
-            points.append((x, y, z))
+        # 如果简单调整不行，尝试更大范围的调整
+        for distance in [2, 3, 4, 5]:
+            for dx in [-1, 0, 1]:
+                for dy in [-1, 0, 1]:
+                    for dz in [-1, 0, 1]:
+                        if dx == 0 and dy == 0 and dz == 0:
+                            continue
+                        offset = (dx * planner.voxel_size * distance,
+                                  dy * planner.voxel_size * distance,
+                                  dz * planner.voxel_size * distance)
+                        new_point = tuple(np.array(point) + np.array(offset))
+                        if not self.is_collision(new_point, planner):
+                            print(f"点已调整为: {new_point}")
+                            return new_point, True
 
-        return points
+        print(f"警告：无法调整点 {point} 使其不在障碍物内")
+        return point, False
