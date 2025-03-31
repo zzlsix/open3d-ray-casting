@@ -9,7 +9,7 @@ from path_planning.algorithm.RRTStarAlgorithm import RRTStarAlgorithm
 # 应用主控制器
 class PathPlanningApp:
 
-    def run(self, obj_file, start_point, goal_point, algorithm):
+    def run(self, obj_file, start_point, goal_point, algorithm, visualizer_type):
         """执行完整的路径规划过程"""
 
         model_processor = ModelProcessor()
@@ -33,7 +33,10 @@ class PathPlanningApp:
 
             # 7. 可视化
             try:
-                visualizer.visualize_with_trimesh(mesh, start_point, goal_point, path)
+                if visualizer_type == "open3d":
+                    visualizer.visualize_with_open3d(mesh, start_point, goal_point, path)
+                elif visualizer_type == "trimesh":
+                    visualizer.visualize_with_trimesh(mesh, start_point, goal_point, path)
             except Exception as e:
                 print(f"无法生成可视化: {e}")
 
@@ -53,4 +56,8 @@ if __name__ == "__main__":
 
     # 创建并运行应用
     app = PathPlanningApp()
-    app.run(obj_file, start_point, goal_point, AStarAlgorithm())
+    app.run(obj_file,
+            start_point,
+            goal_point,
+            AStarAlgorithm(),
+            "open3d")

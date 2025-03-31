@@ -9,6 +9,7 @@ class Visualizer:
     def visualize_with_open3d(self, mesh, start, end, path):
         """使用Open3D可视化3D模型和路径"""
         # 将Trimesh转换为Open3D网格
+        print("通过open3d进行可视化")
         o3d_mesh = o3d.geometry.TriangleMesh()
         o3d_mesh.vertices = o3d.utility.Vector3dVector(mesh.vertices)
         o3d_mesh.triangles = o3d.utility.Vector3iVector(mesh.faces)
@@ -69,6 +70,7 @@ class Visualizer:
         end: 终点坐标，形如[x, y, z]
         path: 路径点列表，每个元素形如[x, y, z]
         """
+        print("通过trimesh进行可视化")
 
         # 创建场景
         scene = trimesh.Scene()
