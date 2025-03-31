@@ -33,7 +33,7 @@ class PathPlanningApp:
 
             # 7. 可视化
             try:
-                visualizer.visualize_with_open3d(mesh, start_point, goal_point, path)
+                visualizer.visualize_with_trimesh(mesh, start_point, goal_point, path)
             except Exception as e:
                 print(f"无法生成可视化: {e}")
 

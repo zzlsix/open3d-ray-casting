@@ -1,5 +1,6 @@
 import numpy as np
 import open3d as o3d
+import trimesh
 
 
 # 可视化模块
@@ -57,6 +58,63 @@ class Visualizer:
             mesh_show_wireframe=True,
             mesh_show_back_face=False,
         )
+
+    def visualize_with_trimesh(self, mesh, start, end, path):
+        """
+        使用trimesh可视化3D路径规划结果
+
+        参数:
+        mesh: trimesh.Trimesh对象，表示3D环境
+        start: 起点坐标，形如[x, y, z]
+        end: 终点坐标，形如[x, y, z]
+        path: 路径点列表，每个元素形如[x, y, z]
+        """
+
+        # 创建场景
+        scene = trimesh.Scene()
+
+        # 添加网格到场景
+        scene.add_geometry(mesh)
+
+        # 创建起点球体（绿色）
+        start_sphere = trimesh.primitives.Sphere(radius=0.1, center=start)
+        start_sphere.visual.face_colors = [0, 255, 0, 255]  # 绿色
+        scene.add_geometry(start_sphere)
+
+        # 创建终点球体（红色）
+        end_sphere = trimesh.primitives.Sphere(radius=0.1, center=end)
+        end_sphere.visual.face_colors = [255, 0, 0, 255]  # 红色
+        scene.add_geometry(end_sphere)
+
+        # 创建路径点（蓝色小球）
+        for point in path:
+            path_sphere = trimesh.primitives.Sphere(radius=0.05, center=point)
+            path_sphere.visual.face_colors = [0, 0, 255, 255]  # 蓝色
+            scene.add_geometry(path_sphere)
+
+        # 创建路径线
+        if len(path) > 0:
+            # 将起点、路径点和终点连接起来
+            all_points = np.vstack([[start], path, [end]])
+
+            # 创建线段列表
+            lines = []
+            for i in range(len(all_points) - 1):
+                lines.append([i, i + 1])
+
+            # 创建路径线对象
+            path_line = trimesh.path.Path3D(
+                entities=[trimesh.path.entities.Line(points=np.arange(len(all_points)))],
+                vertices=all_points)
+
+            # 设置颜色 - 每个实体一个颜色
+            path_line.colors = np.array([[255, 255, 0, 255]])  # 黄色路径线
+
+            scene.add_geometry(path_line)
+
+        # 显示场景
+        scene.show()
+
 
     @staticmethod
     def save_path_to_file(path, filename="path.txt"):
