@@ -2,7 +2,6 @@ import random
 
 import numpy as np
 
-from path_planning.GeometryTools import GeometryTools
 from path_planning.algorithm.PathPlanningAlgorithm import PathPlanningAlgorithm
 
 

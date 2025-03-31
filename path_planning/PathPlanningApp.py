@@ -3,6 +3,7 @@ from path_planning.PathPlanner import PathPlanner
 from path_planning.Visualizer import Visualizer
 from path_planning.algorithm.AStarAlgorithm import AStarAlgorithm
 from path_planning.algorithm.RRTAlgorithm import RRTAlgorithm
+from path_planning.algorithm.RRTStarAlgorithm import RRTStarAlgorithm
 
 
 # 应用主控制器
@@ -52,4 +53,4 @@ if __name__ == "__main__":
 
     # 创建并运行应用
     app = PathPlanningApp()
-    app.run(obj_file, start_point, goal_point, RRTAlgorithm())
+    app.run(obj_file, start_point, goal_point, AStarAlgorithm())

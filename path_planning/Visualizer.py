@@ -1,10 +1,11 @@
+import numpy as np
 import open3d as o3d
 
 
 # 可视化模块
 class Visualizer:
-    @staticmethod
-    def visualize_with_open3d(mesh, start, end, original_path):
+
+    def visualize_with_open3d(self, mesh, start, end, path):
         """使用Open3D可视化3D模型和路径"""
         # 将Trimesh转换为Open3D网格
         o3d_mesh = o3d.geometry.TriangleMesh()
@@ -13,7 +14,7 @@ class Visualizer:
         o3d_mesh.compute_vertex_normals()
 
         # 创建起点和终点球体
-        start_sphere = o3d.geometry.TriangleMesh.create_sphere(radius=0.1)
+        start_sphere = o3d.geometry.TriangleMesh.create_sphere(radius=0.5)
         start_sphere.translate(start)
         start_sphere.paint_uniform_color([0, 0, 1])  # 蓝色
 
@@ -23,7 +24,7 @@ class Visualizer:
 
         # 根据original_path创建路径点的小球
         path_spheres = []
-        for point in original_path:
+        for point in path:
             sphere = o3d.geometry.TriangleMesh.create_sphere(radius=0.05)
             sphere.translate(point)
             sphere.paint_uniform_color([1, 0, 0])  # 红色
@@ -32,8 +33,8 @@ class Visualizer:
         # 创建线段连接路径点
         lines = []
         points = []
-        for i in range(len(original_path)):
-            points.append(original_path[i])
+        for i in range(len(path)):
+            points.append(path[i])
 
         if len(points) > 1:
             line_set = o3d.geometry.LineSet()
