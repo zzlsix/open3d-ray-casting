@@ -9,7 +9,7 @@ from path_planning.algorithm.AStarAlgorithm import AStarAlgorithm
 
 # 路径规划模块
 class PathPlanner:
-    def __init__(self, mesh, voxel_grid, voxel_size, algorithm=AStarAlgorithm()):
+    def __init__(self, mesh, voxel_grid, voxel_size, algorithm):
         self.mesh = mesh
         self.voxel_grid = voxel_grid
         self.voxel_size = voxel_size
@@ -41,11 +41,11 @@ class PathPlanner:
         margin = self.voxel_size * 2
         return all(self.voxel_grid.bounds[0][i] - margin <= point[i] <= self.voxel_grid.bounds[1][i] + margin for i in range(3))
 
-    def find_path(self, start, goal):
+    def find_path(self, start, goal, show_process=False):
         """使用当前设置的算法寻找从起点到终点的路径"""
         # 使用选定的算法查找路径
         start_time = time.time()
-        path = self.algorithm.find_path(start, goal, self)
+        path = self.algorithm.find_path(start, goal, self, show_process)
         end_time = time.time()
         print(f"找到路径！用时: {end_time - start_time:.2f}秒")
 

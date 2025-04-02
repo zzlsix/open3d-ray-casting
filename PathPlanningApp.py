@@ -1,12 +1,13 @@
 from path_planning.ModelProcessor import ModelProcessor
 from path_planning.PathPlanner import PathPlanner
+from path_planning.algorithm.AStarAlgorithm import AStarAlgorithm
 from path_planning.algorithm.RRTAlgorithm import RRTAlgorithm
 
 
 # 应用主控制器
 class PathPlanningApp:
 
-    def run(self, obj_file, start_point, goal_point, algorithm, visualizer_type):
+    def run(self, obj_file, start_point, goal_point, algorithm, show_process):
         """执行完整的路径规划过程"""
 
         model_processor = ModelProcessor()
@@ -21,7 +22,7 @@ class PathPlanningApp:
         print(f"原始起点: {start_point}")
         print(f"原始终点: {goal_point}")
 
-        path = path_planner.find_path(start_point, goal_point)
+        path = path_planner.find_path(start_point, goal_point, show_process)
 
         if path:
             pass
@@ -57,5 +58,5 @@ if __name__ == "__main__":
     app.run(obj_file,
             start_point,
             goal_point,
-            RRTAlgorithm(),
-            "open3d")
+            AStarAlgorithm(),
+            show_process=False)

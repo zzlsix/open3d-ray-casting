@@ -4,31 +4,19 @@ import trimesh
 from collections import defaultdict
 from path_planning.GeometryTools import GeometryTools
 from path_planning.algorithm.PathPlanningAlgorithm import PathPlanningAlgorithm
+from path_planning.visualization.ProcessVisualizer import AStarProcessVisualizer
 
 
 # A*算法实现
 class AStarAlgorithm(PathPlanningAlgorithm):
-    def find_path(self, start, goal, planner):
+    def __init__(self):
+        self.visualizer = AStarProcessVisualizer()
+
+    def find_path(self, start, goal, planner, show_process=True):
         """使用A*算法查找路径"""
         # 处理起点和终点，确保它们在表面外部
         safe_start = GeometryTools.find_nearest_surface_point(planner.mesh, start)
         safe_goal = GeometryTools.find_nearest_surface_point(planner.mesh, goal)
-
-        print(f"处理后的起点: {safe_start}")
-        print(f"处理后的终点: {safe_goal}")
-
-        # 调整起点和终点，确保不在障碍物内
-        safe_start, start_adjusted = self.adjust_point_if_in_collision(safe_start, planner)
-        safe_goal, goal_adjusted = self.adjust_point_if_in_collision(safe_goal, planner)
-
-        # 如果仍然无法找到有效的起点或终点
-        if self.is_collision(safe_start, planner):
-            print("错误：无法找到有效的起点")
-            return None
-
-        if self.is_collision(safe_goal, planner):
-            print("错误：无法找到有效的终点")
-            return None
 
         # 转换为网格坐标
         start_grid = planner.to_grid(safe_start)
@@ -48,6 +36,13 @@ class AStarAlgorithm(PathPlanningAlgorithm):
         f_score[start_grid] = self.heuristic(start_grid, goal_grid)
 
         open_set_hash = {start_grid}
+        visited_points = []
+        open_set_points = [planner.to_world(start_grid)]
+
+        # 初始化可视化
+        if show_process:
+            self.visualizer.show(planner.mesh, start, goal, None)
+
         visited_count = 0
 
         # A*主循环
@@ -55,7 +50,23 @@ class AStarAlgorithm(PathPlanningAlgorithm):
             # 获取f值最小的节点
             current_f, current = heapq.heappop(open_set)
             open_set_hash.remove(current)
+            current_world = planner.to_world(current)
+            visited_points.append(current_world)
             visited_count += 1
+
+            # 构建当前路径用于可视化
+            temp_path = []
+            temp_current = current
+            while temp_current in came_from:
+                temp_path.append(planner.to_world(temp_current))
+                temp_current = came_from[temp_current]
+            temp_path.append(planner.to_world(start_grid))
+            temp_path.reverse()
+
+            # 更新开放集点的世界坐标
+            open_set_world_points = [planner.to_world(node) for _, node in open_set]
+            if show_process:
+                self.visualizer.update(current_world, open_set_world_points, visited_points, came_from, temp_path)
 
             # 定期显示进度
             if visited_count % 1000 == 0:
@@ -73,6 +84,13 @@ class AStarAlgorithm(PathPlanningAlgorithm):
                 print(f"路径长度: {len(path)}个点")
                 print(f"探索节点数: {visited_count}")
                 process_path = self.post_process_path(planner.mesh, path, start, goal)
+
+                # 显示最终路径
+                if show_process:
+                    self.visualizer.update_path(process_path)
+                    self.visualizer.vis_o3d.run()  # 保持窗口打开直到用户关闭
+                    self.visualizer.vis_o3d.destroy_window()
+
                 return process_path
 
             # 检查所有邻居
@@ -96,10 +114,16 @@ class AStarAlgorithm(PathPlanningAlgorithm):
                     if neighbor_grid not in open_set_hash:
                         heapq.heappush(open_set, (f_score[neighbor_grid], neighbor_grid))
                         open_set_hash.add(neighbor_grid)
+                        open_set_points.append(neighbor_world)
 
         # 如果没有找到路径
         print(f"探索节点数: {visited_count}")
         print(f"没有找到路径")
+
+        # 关闭可视化窗口
+        if show_process:
+            self.visualizer.vis_o3d.destroy_window()
+
         return None
 
     @staticmethod

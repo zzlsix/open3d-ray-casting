@@ -31,7 +31,7 @@ class RRTAlgorithm(PathPlanningAlgorithm):
 
 
 
-    def find_path(self, start, goal, planner):
+    def find_path(self, start, goal, planner, show_process=False):
         """
         使用RRT算法查找从起点到终点的路径，并可视化过程
 
@@ -68,7 +68,8 @@ class RRTAlgorithm(PathPlanningAlgorithm):
             max_bounds = np.maximum(np.array(start), np.array(goal)) + 100
 
         # 初始化可视化 - 传入planner以获取mesh
-        self.visualize.show(planner.mesh, start, goal, None)
+        if show_process:
+            self.visualize.show(planner.mesh, start, goal, None)
 
         # 开始RRT迭代
         for i in range(self.max_iterations):
@@ -121,7 +122,7 @@ class RRTAlgorithm(PathPlanningAlgorithm):
         print("RRT未能找到路径，达到最大迭代次数")
 
         # 如果没找到路径，仍然显示最终的RRT树
-        if self.visualize:
+        if self.show_process:
             self.visualize.update(tree)
             # 保持窗口打开直到用户关闭
             print("未找到路径，按Q关闭可视化窗口...")

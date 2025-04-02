@@ -17,7 +17,7 @@ class GeometryTools:
         return len(intersections[0]) % 2 == 1
 
     @staticmethod
-    def find_nearest_surface_point(mesh, point, search_radius=10.0):
+    def find_nearest_surface_point(mesh, point):
         """找到距离给定点最近的表面点，确保在表面外部"""
         # 计算点到网格的最近点
         closest_point, distance, triangle_id = trimesh.proximity.closest_point(mesh, [point])
@@ -32,7 +32,7 @@ class GeometryTools:
             normal = mesh.face_normals[triangle_id[0]]
 
             # 沿法向量移动一段距离，以确保在表面外部
-            offset_distance = 1.5
+            offset_distance = 1
             safe_point = point + normal * offset_distance
             print(f"表面点已偏移: 从 {point} 到 {safe_point}")
             return safe_point

@@ -5,7 +5,7 @@ import numpy as np
 import open3d as o3d
 
 class ProcessVisualizer(AbstractVisualizer):
-    def _trimesh_to_open3d(self, trimesh_mesh):
+    def trimesh_to_open3d(self, trimesh_mesh):
         """将trimesh网格转换为Open3D网格"""
         # 创建Open3D网格
         mesh_o3d = o3d.geometry.TriangleMesh()
@@ -47,23 +47,19 @@ class RRTProcessVisualizer(ProcessVisualizer):
         # 导入环境模型 - 从planner的mesh属性获取
         if mesh is not None:
             # 转换trimesh到open3d
-            o3d_mesh = self._trimesh_to_open3d(mesh)
+            o3d_mesh = self.trimesh_to_open3d(mesh)
             self.vis_o3d.add_geometry(o3d_mesh)
             print("成功导入环境模型到Open3D可视化器")
         else:
             print("警告: 无法从planner获取mesh模型")
 
-        # 创建坐标系
-        coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=5.0)
-        self.vis_o3d.add_geometry(coordinate_frame)
-
         # 创建起点和终点球体
-        start_sphere = o3d.geometry.TriangleMesh.create_sphere(radius=1.0)
+        start_sphere = o3d.geometry.TriangleMesh.create_sphere(radius=0.1)
         start_sphere.translate(start)
         start_sphere.paint_uniform_color([0, 1, 0])  # 绿色
         self.vis_o3d.add_geometry(start_sphere)
 
-        goal_sphere = o3d.geometry.TriangleMesh.create_sphere(radius=1.0)
+        goal_sphere = o3d.geometry.TriangleMesh.create_sphere(radius=0.1)
         goal_sphere.translate(goal)
         goal_sphere.paint_uniform_color([1, 0, 0])  # 红色
         self.vis_o3d.add_geometry(goal_sphere)
@@ -127,3 +123,115 @@ class RRTProcessVisualizer(ProcessVisualizer):
         self.vis_o3d.poll_events()
         self.vis_o3d.update_renderer()
         time.sleep(0.01)
+
+
+class AStarProcessVisualizer(ProcessVisualizer):
+    def __init__(self):
+        self.vis_o3d = None
+        self.path_lines = None  # 存放结果路径
+        self.visited_points = None  # 存放已访问的点
+        self.current_point = None  # 当前正在评估的点
+        self.open_set_points = None  # 存放开放集中的点
+
+    def show(self, mesh, start, end, path, key="value"):
+        self._init_process_visualization(mesh, start, end)
+
+    def _init_process_visualization(self, mesh, start, goal):
+        """使用Open3D初始化过程可视化"""
+
+        # 创建可视化窗口
+        self.vis_o3d = o3d.visualization.Visualizer()
+        self.vis_o3d.create_window(window_name="A* 3D Path Planning", width=1024, height=768)
+
+        # 导入环境模型
+        if mesh is not None:
+            # 转换trimesh到open3d
+            o3d_mesh = self.trimesh_to_open3d(mesh)
+            self.vis_o3d.add_geometry(o3d_mesh)
+            print("成功导入环境模型到Open3D可视化器")
+        else:
+            print("警告: 无法获取mesh模型")
+
+        # 创建起点和终点球体
+        start_sphere = o3d.geometry.TriangleMesh.create_sphere(radius=0.1)
+        start_sphere.translate(start)
+        start_sphere.paint_uniform_color([0, 1, 0])  # 绿色
+        self.vis_o3d.add_geometry(start_sphere)
+
+        goal_sphere = o3d.geometry.TriangleMesh.create_sphere(radius=0.1)
+        goal_sphere.translate(goal)
+        goal_sphere.paint_uniform_color([1, 0, 0])  # 红色
+        self.vis_o3d.add_geometry(goal_sphere)
+
+        # 创建已访问点的点云
+        self.visited_points = o3d.geometry.PointCloud()
+        self.vis_o3d.add_geometry(self.visited_points)
+
+        # 创建开放集点云
+        self.open_set_points = o3d.geometry.PointCloud()
+        self.vis_o3d.add_geometry(self.open_set_points)
+
+        # 创建当前点
+        self.current_point = o3d.geometry.PointCloud()
+        self.vis_o3d.add_geometry(self.current_point)
+
+        # 创建路径线集合
+        self.path_lines = o3d.geometry.LineSet()
+        self.vis_o3d.add_geometry(self.path_lines)
+
+        # 设置视角
+        self.vis_o3d.get_render_option().point_size = 5
+        self.vis_o3d.get_render_option().line_width = 2.0
+        self.vis_o3d.get_render_option().background_color = np.array([0.1, 0.1, 0.1])  # 深灰色背景
+
+        # 设置相机位置
+        view_control = self.vis_o3d.get_view_control()
+        view_control.set_zoom(0.8)
+
+        # 更新视图
+        self.vis_o3d.poll_events()
+        self.vis_o3d.update_renderer()
+
+    def update(self, current_point, open_set, visited_points, came_from=None, path=None):
+        """更新A*搜索过程的可视化"""
+        # 更新当前点
+        if current_point is not None:
+            self.current_point.points = o3d.utility.Vector3dVector([current_point])
+            self.current_point.paint_uniform_color([1, 1, 0])  # 黄色
+            self.vis_o3d.update_geometry(self.current_point)
+
+        # 更新开放集
+        if open_set:
+            self.open_set_points.points = o3d.utility.Vector3dVector(open_set)
+            self.open_set_points.paint_uniform_color([0, 0.8, 0.8])  # 青色
+            self.vis_o3d.update_geometry(self.open_set_points)
+
+        # 更新已访问点
+        if visited_points:
+            self.visited_points.points = o3d.utility.Vector3dVector(visited_points)
+            self.visited_points.paint_uniform_color([0.5, 0.5, 0.8])  # 淡蓝色
+            self.vis_o3d.update_geometry(self.visited_points)
+
+        # 更新路径
+        if path is not None:
+            self.update_path(path)
+
+        # 更新视图
+        self.vis_o3d.poll_events()
+        self.vis_o3d.update_renderer()
+        time.sleep(0.1)  # 添加短暂延迟以便观察
+
+    def update_path(self, path):
+        """更新最终路径的可视化"""
+        if path is not None and len(path) > 1:
+            path_points = []
+            path_lines = []
+
+            for i in range(len(path) - 1):
+                path_points.extend([path[i], path[i + 1]])
+                path_lines.append([i * 2, i * 2 + 1])
+
+            self.path_lines.points = o3d.utility.Vector3dVector(path_points)
+            self.path_lines.lines = o3d.utility.Vector2iVector(path_lines)
+            self.path_lines.paint_uniform_color([1, 0, 0])  # 红色
+            self.vis_o3d.update_geometry(self.path_lines)
