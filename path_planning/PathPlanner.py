@@ -47,11 +47,12 @@ class PathPlanner:
         start_time = time.time()
         path = self.algorithm.find_path(start, goal, self, show_process)
         end_time = time.time()
-        print(f"找到路径！用时: {end_time - start_time:.2f}秒")
+        cost_time = end_time - start_time
+        print(f"找到路径！用时: {cost_time:.2f}秒")
 
         # 如果找到路径，添加真正的目标点
         if path:
             path.append(goal)
-        return path
+        return path, cost_time
 
 
