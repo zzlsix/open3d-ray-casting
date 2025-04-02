@@ -1,12 +1,16 @@
 import random
+import time
 
 import numpy as np
 
 from path_planning.algorithm.PathPlanningAlgorithm import PathPlanningAlgorithm
+from path_planning.visualization.ProcessVisualizer import RRTProcessVisualizer
+from path_planning.visualization.ResultVisualizer import ResultVisualizer
 
 
 class RRTAlgorithm(PathPlanningAlgorithm):
-    def __init__(self, max_iterations=3000, step_size=0.9, goal_sample_rate=0.1, max_extend_length=1.0):
+    def __init__(self, max_iterations=3000, step_size=0.9, goal_sample_rate=0.3, max_extend_length=0.9,
+                 show_process=True):
         """
         初始化RRT算法
 
@@ -15,15 +19,21 @@ class RRTAlgorithm(PathPlanningAlgorithm):
             step_size: 每次扩展的步长
             goal_sample_rate: 以目标点作为采样点的概率
             max_extend_length: 最大扩展长度
+            visualize: 可视化
         """
         self.max_iterations = max_iterations
         self.step_size = step_size
         self.goal_sample_rate = goal_sample_rate
         self.max_extend_length = max_extend_length
+        self.show_process = show_process
+        self.visualize = RRTProcessVisualizer()
+
+
+
 
     def find_path(self, start, goal, planner):
         """
-        使用RRT算法查找从起点到终点的路径
+        使用RRT算法查找从起点到终点的路径，并可视化过程
 
         参数:
             start: 世界坐标中的起点
@@ -57,6 +67,9 @@ class RRTAlgorithm(PathPlanningAlgorithm):
             min_bounds = np.minimum(np.array(start), np.array(goal)) - 100
             max_bounds = np.maximum(np.array(start), np.array(goal)) + 100
 
+        # 初始化可视化 - 传入planner以获取mesh
+        self.visualize.show(planner.mesh, start, goal, None)
+
         # 开始RRT迭代
         for i in range(self.max_iterations):
             if i % 100 == 0:
@@ -78,15 +91,47 @@ class RRTAlgorithm(PathPlanningAlgorithm):
                 # 将新节点添加到树中
                 tree[new_node] = nearest_node
 
+                # 更新可视化
+                if self.show_process:
+                    self.visualize.update(tree, new_node, nearest_node)
+
                 # 检查是否可以连接到目标
                 if self.distance(new_node, goal) < self.max_extend_length:
-                    # 在find_path方法中
                     if not self.is_path_collision(new_node, goal, planner):
                         tree[goal] = new_node
                         print(f"RRT找到路径，迭代次数: {i + 1}")
-                        return self.extract_path(tree, start, goal, planner)
+                        path = self.extract_path(tree, start, goal, planner)
+
+                        # 最终路径可视化
+                        if self.show_process:
+                            self.visualize.update(tree, path=path)
+
+                            # 保持窗口打开直到用户关闭
+                            print("路径规划完成，按Q关闭可视化窗口...")
+                            while True:
+                                self.visualize.vis_o3d.poll_events()
+                                self.visualize.vis_o3d.update_renderer()
+                                time.sleep(0.1)
+                                # 检查是否按下Q键或关闭窗口
+                                if not self.visualize.vis_o3d.poll_events():
+                                    break
+
+                        return path
 
         print("RRT未能找到路径，达到最大迭代次数")
+
+        # 如果没找到路径，仍然显示最终的RRT树
+        if self.visualize:
+            self.visualize.update(tree)
+            # 保持窗口打开直到用户关闭
+            print("未找到路径，按Q关闭可视化窗口...")
+            while True:
+                self.visualize.vis_o3d.poll_events()
+                self.visualize.vis_o3d.update_renderer()
+                time.sleep(0.1)
+                # 检查是否按下Q键或关闭窗口
+                if not self.visualize.vis_o3d.poll_events():
+                    break
         return None
 
     def random_point(self, min_bounds, max_bounds):

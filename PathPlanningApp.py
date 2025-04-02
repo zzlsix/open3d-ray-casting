@@ -1,9 +1,6 @@
 from path_planning.ModelProcessor import ModelProcessor
 from path_planning.PathPlanner import PathPlanner
-from path_planning.Visualizer import Visualizer
-from path_planning.algorithm.AStarAlgorithm import AStarAlgorithm
 from path_planning.algorithm.RRTAlgorithm import RRTAlgorithm
-from path_planning.algorithm.RRTStarAlgorithm import RRTStarAlgorithm
 
 
 # 应用主控制器
@@ -27,20 +24,21 @@ class PathPlanningApp:
         path = path_planner.find_path(start_point, goal_point)
 
         if path:
-            visualizer = Visualizer()
-            visualizer.print_path(path)
-            visualizer.save_path_to_file(path)
-
-            # 7. 可视化
-            try:
-                if visualizer_type == "open3d":
-                    visualizer.visualize_with_open3d(mesh, start_point, goal_point, path)
-                elif visualizer_type == "trimesh":
-                    visualizer.visualize_with_trimesh(mesh, start_point, goal_point, path)
-            except Exception as e:
-                print(f"无法生成可视化: {e}")
-
-            return path
+            pass
+            # visualizer = Visualizer()
+            # visualizer.print_path(path)
+            # visualizer.save_path_to_file(path)
+            #
+            # # 7. 可视化
+            # try:
+            #     if visualizer_type == "open3d":
+            #         visualizer.visualize_with_open3d(mesh, start_point, goal_point, path)
+            #     elif visualizer_type == "trimesh":
+            #         visualizer.visualize_with_trimesh(mesh, start_point, goal_point, path)
+            # except Exception as e:
+            #     print(f"无法生成可视化: {e}")
+            #
+            # return path
         else:
             print("无法找到有效路径")
             return None
@@ -59,5 +57,5 @@ if __name__ == "__main__":
     app.run(obj_file,
             start_point,
             goal_point,
-            AStarAlgorithm(),
+            RRTAlgorithm(),
             "open3d")

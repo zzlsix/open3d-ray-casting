@@ -1,12 +1,24 @@
-import numpy as np
-import open3d as o3d
 import trimesh
+import open3d as o3d
+import numpy as np
+from enum import Enum
+from path_planning.visualization.AbstractVisualizer import AbstractVisualizer, Open3dColor
 
 
-# 可视化模块
-class Visualizer:
+class VisualizerType(Enum):
+    open3d = "open3d"
+    trimesh = "trimesh"
 
-    def visualize_with_open3d(self, mesh, start, end, path):
+
+class ResultVisualizer(AbstractVisualizer):
+
+    def show(self, mesh, start, end, path, visualizer_type=None):
+        if visualizer_type == VisualizerType.open3d:
+            self._visualize_with_open3d(mesh, start, end, path)
+        elif visualizer_type == VisualizerType.trimesh:
+            self._visualize_with_trimesh(mesh, start, end, path)
+
+    def _visualize_with_open3d(self, mesh, start, end, path):
         """使用Open3D可视化3D模型和路径"""
         # 将Trimesh转换为Open3D网格
         print("通过open3d进行可视化")
@@ -18,18 +30,18 @@ class Visualizer:
         # 创建起点和终点球体
         start_sphere = o3d.geometry.TriangleMesh.create_sphere(radius=0.5)
         start_sphere.translate(start)
-        start_sphere.paint_uniform_color([0, 0, 1])  # 蓝色
+        start_sphere.paint_uniform_color(Open3dColor.BLUE)  # 蓝色
 
         end_sphere = o3d.geometry.TriangleMesh.create_sphere(radius=1)
         end_sphere.translate(end)
-        end_sphere.paint_uniform_color([0, 1, 0])  # 绿色
+        end_sphere.paint_uniform_color(Open3dColor.GREEN)  # 绿色
 
         # 根据original_path创建路径点的小球
         path_spheres = []
         for point in path:
             sphere = o3d.geometry.TriangleMesh.create_sphere(radius=0.05)
             sphere.translate(point)
-            sphere.paint_uniform_color([1, 0, 0])  # 红色
+            sphere.paint_uniform_color(Open3dColor.RED)  # 红色
             path_spheres.append(sphere)
 
         # 创建线段连接路径点
@@ -43,7 +55,7 @@ class Visualizer:
             line_set.points = o3d.utility.Vector3dVector(points)
             line_indices = [[i, i + 1] for i in range(len(points) - 1)]
             line_set.lines = o3d.utility.Vector2iVector(line_indices)
-            line_set.colors = o3d.utility.Vector3dVector([[1, 0.5, 0]] * len(line_indices))  # 橙色
+            line_set.colors = o3d.utility.Vector3dVector([Open3dColor.ORANGE] * len(line_indices))  # 橙色
             lines.append(line_set)
 
         # 将所有几何体添加到列表中
@@ -60,7 +72,7 @@ class Visualizer:
             mesh_show_back_face=False,
         )
 
-    def visualize_with_trimesh(self, mesh, start, end, path):
+    def _visualize_with_trimesh(self, mesh, start, end, path):
         """
         使用trimesh可视化3D路径规划结果
 
@@ -116,19 +128,3 @@ class Visualizer:
 
         # 显示场景
         scene.show()
-
-
-    @staticmethod
-    def save_path_to_file(path, filename="path.txt"):
-        """将路径保存到文件"""
-        with open(filename, "w") as f:
-            for point in path:
-                f.write(f"{point[0]:.4f} {point[1]:.4f} {point[2]:.4f}\n")
-        print(f"路径已保存到{filename}")
-
-    @staticmethod
-    def print_path(path):
-        """打印路径坐标"""
-        print("\n路径坐标:")
-        for i, point in enumerate(path):
-            print(f"点 {i}: ({point[0]:.2f}, {point[1]:.2f}, {point[2]:.2f})")
