@@ -3,6 +3,7 @@ import random
 import numpy as np
 
 from path_planning.algorithm.PathPlanningAlgorithm import PathPlanningAlgorithm
+from path_planning.visualization.ProcessVisualizer import RRTStarProcessVisualizer
 
 
 class RRTStarAlgorithm(PathPlanningAlgorithm):
@@ -20,8 +21,9 @@ class RRTStarAlgorithm(PathPlanningAlgorithm):
         self.step_size = step_size
         self.goal_sample_rate = goal_sample_rate
         self.search_radius = search_radius
+        self.visualize = RRTStarProcessVisualizer()
 
-    def find_path(self, start, goal, planner):
+    def find_path(self, start, goal, planner, show_process=False):
         """
         使用RRT*算法查找从起点到终点的路径
 
@@ -29,6 +31,7 @@ class RRTStarAlgorithm(PathPlanningAlgorithm):
             start: 起点坐标
             goal: 终点坐标
             planner: PathPlanner实例
+            visualizer: 可视化器实例
 
         返回:
             路径点列表或None（如果未找到路径）
@@ -53,6 +56,10 @@ class RRTStarAlgorithm(PathPlanningAlgorithm):
         nodes = [start]  # 节点列表
         parents = [-1]  # 每个节点的父节点索引
         costs = [0.0]  # 从起点到每个节点的成本
+
+        # 初始化可视化
+        if show_process:
+            self.visualize.show(planner.mesh, start, goal, None)
 
         # 主循环
         for i in range(self.max_iterations):
@@ -94,21 +101,49 @@ class RRTStarAlgorithm(PathPlanningAlgorithm):
                 costs.append(min_cost)
                 new_idx = len(nodes) - 1
 
+                # 记录重新连接的边
+                rewired_edges = []
+
                 # 重新连接 - 检查是否可以通过新节点降低附近节点的成本
-                self.rewire(nodes, parents, costs, new_idx, near_indices, planner)
+                for near_idx in near_indices:
+                    near_node = nodes[near_idx]
+
+                    # 计算通过新节点的成本
+                    potential_cost = costs[new_idx] + self.distance(new_node, near_node)
+
+                    # 如果成本更低且路径无碰撞，则重新连接
+                    if potential_cost < costs[near_idx] and self.is_collision_free(new_node, near_node, planner):
+                        old_parent = parents[near_idx]
+                        parents[near_idx] = new_idx
+                        costs[near_idx] = potential_cost
+                        rewired_edges.append((new_idx, near_idx))
+
+                # 更新可视化
+                goal_connected = False
 
                 # 检查是否可以连接到目标
-                if self.distance(new_node, goal) < self.step_size and not self.is_collision_free(new_node, goal,
-                                                                                                 planner):
+                if self.distance(new_node, goal) < self.step_size and self.is_collision_free(new_node, goal, planner):
                     # 找到路径
                     nodes.append(goal)
                     parents.append(new_idx)
                     costs.append(costs[new_idx] + self.distance(new_node, goal))
+                    goal_connected = True
+
+                    # 更新可视化
+                    if show_process:
+                        path = self.extract_path(nodes, parents)
+                        self.visualize.update(nodes, parents, new_node, rewired_edges, goal_connected, goal, path)
+                        self.visualize.vis_o3d.run()  # 保持窗口打开直到用户关闭
+                        self.visualize.vis_o3d.destroy_window()
 
                     # 构建路径
                     path = self.extract_path(nodes, parents)
                     print(f"RRT*找到路径，迭代次数: {i + 1}")
                     return path
+
+                # 定期更新可视化
+                if show_process:
+                    self.visualize.update(nodes, parents, new_node, rewired_edges, goal_connected, goal)
 
             # 每100次迭代打印进度
             if (i + 1) % 100 == 0:
@@ -120,11 +155,24 @@ class RRTStarAlgorithm(PathPlanningAlgorithm):
                 nodes[nearest_to_goal], goal, planner):
             nodes.append(goal)
             parents.append(nearest_to_goal)
+
+            # 更新可视化
+            if show_process:
+                path = self.extract_path(nodes, parents)
+                self.visualize.update(nodes, parents, None, [], True, goal, path)
+                self.visualize.vis_o3d.run()  # 保持窗口打开直到用户关闭
+                self.visualize.vis_o3d.destroy_window()
+
             path = self.extract_path(nodes, parents)
             print("RRT*找到近似路径")
             return path
 
         print("RRT*未能找到路径")
+
+        # 关闭可视化窗口
+        if show_process:
+            self.visualize.vis_o3d.destroy_window()
+
         return None
 
     def random_sample(self, planner):

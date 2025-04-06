@@ -42,5 +42,5 @@ if __name__ == "__main__":
     app.run(obj_file,
             start_point,
             goal_point,
-            "A*",
-            show_process=False)
+            "RRT*",
+            show_process=True)
