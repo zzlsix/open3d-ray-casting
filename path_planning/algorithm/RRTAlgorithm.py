@@ -9,8 +9,7 @@ from path_planning.visualization.ResultVisualizer import ResultVisualizer
 
 
 class RRTAlgorithm(PathPlanningAlgorithm):
-    def __init__(self, max_iterations=3000, step_size=0.9, goal_sample_rate=0.3, max_extend_length=0.9,
-                 show_process=True):
+    def __init__(self, max_iterations=3000, step_size=0.9, goal_sample_rate=0.3, max_extend_length=0.9):
         """
         初始化RRT算法
 
@@ -25,11 +24,7 @@ class RRTAlgorithm(PathPlanningAlgorithm):
         self.step_size = step_size
         self.goal_sample_rate = goal_sample_rate
         self.max_extend_length = max_extend_length
-        self.show_process = show_process
         self.visualize = RRTProcessVisualizer()
-
-
-
 
     def find_path(self, start, goal, planner, show_process=False):
         """
@@ -93,7 +88,7 @@ class RRTAlgorithm(PathPlanningAlgorithm):
                 tree[new_node] = nearest_node
 
                 # 更新可视化
-                if self.show_process:
+                if show_process:
                     self.visualize.update(tree, new_node, nearest_node)
 
                 # 检查是否可以连接到目标
@@ -104,7 +99,7 @@ class RRTAlgorithm(PathPlanningAlgorithm):
                         path = self.extract_path(tree, start, goal, planner)
 
                         # 最终路径可视化
-                        if self.show_process:
+                        if show_process:
                             self.visualize.update(tree, path=path)
 
                             # 保持窗口打开直到用户关闭
@@ -122,7 +117,7 @@ class RRTAlgorithm(PathPlanningAlgorithm):
         print("RRT未能找到路径，达到最大迭代次数")
 
         # 如果没找到路径，仍然显示最终的RRT树
-        if self.show_process:
+        if show_process:
             self.visualize.update(tree)
             # 保持窗口打开直到用户关闭
             print("未找到路径，按Q关闭可视化窗口...")

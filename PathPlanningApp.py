@@ -26,7 +26,7 @@ class PathPlanningApp:
         print(f"起点: {start_point}")
         print(f"终点: {goal_point}")
 
-        path, cost_time = path_planner.find_path(start_point, goal_point, show_process)
+        path, cost_time = path_planner.find_path(start_point, goal_point, show_process=show_process)
 
 
 if __name__ == "__main__":
@@ -42,5 +42,5 @@ if __name__ == "__main__":
     app.run(obj_file,
             start_point,
             goal_point,
-            "RRT*",
+            "RRT",
             show_process=True)

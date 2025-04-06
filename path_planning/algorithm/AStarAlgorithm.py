@@ -12,7 +12,7 @@ class AStarAlgorithm(PathPlanningAlgorithm):
     def __init__(self):
         self.visualizer = AStarProcessVisualizer()
 
-    def find_path(self, start, goal, planner, show_process=True):
+    def find_path(self, start, goal, planner, show_process=False):
         """使用A*算法查找路径"""
         # 处理起点和终点，确保它们在表面外部
         safe_start = GeometryTools.find_nearest_surface_point(planner.mesh, start)

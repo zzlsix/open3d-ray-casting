@@ -45,7 +45,7 @@ class PathPlanner:
         """使用当前设置的算法寻找从起点到终点的路径"""
         # 使用选定的算法查找路径
         start_time = time.time()
-        path = self.algorithm.find_path(start, goal, self, show_process)
+        path = self.algorithm.find_path(start, goal, self, show_process=show_process)
         end_time = time.time()
         cost_time = end_time - start_time
         print(f"找到路径！用时: {cost_time:.2f}秒")
