@@ -163,7 +163,7 @@ class Evaluator:
         # 创建比较表格
         print("\n算法比较结果:")
         print("-" * 80)
-        header = "指标".ljust(20)
+        header = "target".ljust(20)
         for algo in algorithms:
             header += algo.ljust(20)
         print(header)
@@ -179,8 +179,20 @@ class Evaluator:
                     row += "N/A".ljust(20)
             print(row)
 
-        # 可视化比较 (可以根据需要扩展)
+        # 计算综合评分
+        scores, normalized_data = self.calculate_overall_score()
+
+        # 打印综合评分
+        print("\n算法综合评分:")
+        print("-" * 40)
+        for algo, score in scores.items():
+            print(f"{algo}: {score:.4f}")
+
+        # 可视化比较
         self.visualize_comparison()
+
+        # 雷达图分析
+        self.visualize_radar_chart(normalized_data)
 
     def visualize_comparison(self):
         """可视化不同算法的性能比较"""
@@ -197,19 +209,112 @@ class Evaluator:
         # 计算时间比较
         plt.subplot(1, 2, 1)
         plt.bar(algorithms, times)
-        plt.title('计算时间比较')
-        plt.ylabel('时间 (秒)')
+        plt.title('comparison of calculation time')
+        plt.ylabel('time(seconds)')
 
         # 路径长度比较
         if all('path_length' in self.results[algo]['metrics'] for algo in algorithms):
             lengths = [self.results[algo]['metrics']['path_length'] for algo in algorithms]
             plt.subplot(1, 2, 2)
             plt.bar(algorithms, lengths)
-            plt.title('路径长度比较')
-            plt.ylabel('长度')
+            plt.title('path length comparison')
+            plt.ylabel('length')
 
         plt.tight_layout()
         plt.savefig('algorithm_comparison.png')
+        plt.show()
+
+    def calculate_overall_score(self):
+        """计算各算法的综合评分"""
+        if not self.results:
+            return {}
+
+        # 提取所有算法的指标值
+        metrics_data = {}
+        for metric in ['path_length', 'computation_time', 'smoothness', 'safety_margin', 'memory_usage_kb']:
+            metrics_data[metric] = []
+            for algo in self.results:
+                if metric in self.results[algo]['metrics']:
+                    metrics_data[metric].append(self.results[algo]['metrics'][metric])
+
+        # 归一化处理
+        normalized_data = {}
+        for algo in self.results:
+            normalized_data[algo] = {}
+            for metric in metrics_data:
+                if metric not in self.results[algo]['metrics']:
+                    continue
+
+                value = self.results[algo]['metrics'][metric]
+                min_val = min(metrics_data[metric])
+                max_val = max(metrics_data[metric])
+
+                # 避免除零错误
+                if max_val == min_val:
+                    normalized_data[algo][metric] = 1.0
+                    continue
+
+                # 根据指标类型选择归一化方向
+                if metric in ['smoothness', 'safety_margin']:
+                    # 这些指标越大越好
+                    normalized_data[algo][metric] = (value - min_val) / (max_val - min_val)
+                else:
+                    # 这些指标越小越好
+                    normalized_data[algo][metric] = (max_val - value) / (max_val - min_val)
+
+        # 定义权重
+        weights = {
+            'path_length': 0.25,
+            'computation_time': 0.20,
+            'smoothness': 0.20,
+            'safety_margin': 0.25,
+            'memory_usage_kb': 0.10
+        }
+
+        # 计算加权得分
+        scores = {}
+        for algo in normalized_data:
+            score = 0
+            for metric in normalized_data[algo]:
+                score += normalized_data[algo][metric] * weights[metric]
+            scores[algo] = score
+
+        return scores, normalized_data
+
+    def visualize_radar_chart(self, normalized_data):
+        """使用雷达图可视化各算法在不同指标上的表现"""
+        algorithms = list(normalized_data.keys())
+        metrics = ['path_length', 'computation_time', 'smoothness', 'safety_margin', 'memory_usage_kb']
+
+        # 准备雷达图数据
+        angles = np.linspace(0, 2 * np.pi, len(metrics), endpoint=False).tolist()
+        angles += angles[:1]  # 闭合雷达图
+
+        fig, ax = plt.subplots(figsize=(10, 8), subplot_kw=dict(polar=True))
+
+        for algo in algorithms:
+            values = []
+            for metric in metrics:
+                if metric in normalized_data[algo]:
+                    values.append(normalized_data[algo][metric])
+                else:
+                    values.append(0)
+            values += values[:1]  # 闭合雷达图
+
+            ax.plot(angles, values, linewidth=2, label=algo)
+            ax.fill(angles, values, alpha=0.1)
+
+        # 设置雷达图标签
+        ax.set_xticks(angles[:-1])
+        ax.set_xticklabels(metrics)
+        ax.set_yticks([0.2, 0.4, 0.6, 0.8, 1.0])
+        ax.set_yticklabels(['0.2', '0.4', '0.6', '0.8', '1.0'])
+        ax.set_ylim(0, 1)
+
+        plt.legend(loc='upper right', bbox_to_anchor=(0.1, 0.1))
+        plt.title('comparison of algorithm performance radar graphs')
+        plt.tight_layout()
+        plt.savefig('algorithm_radar_comparison.png')
         plt.show()
 
 
