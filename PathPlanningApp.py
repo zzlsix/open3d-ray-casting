@@ -1,8 +1,10 @@
 from path_planning.ModelProcessor import ModelProcessor
 from path_planning.PathPlanner import PathPlanner
 from path_planning.algorithm.AStarAlgorithm import AStarAlgorithm
+from path_planning.algorithm.AStarAlgortihmTest import AStarAlgorithmTest
 from path_planning.algorithm.RRTAlgorithm import RRTAlgorithm
 from path_planning.algorithm.RRTStarAlgorithm import RRTStarAlgorithm
+from path_planning.visualization.ResultVisualizer import ResultVisualizer, VisualizerType
 
 
 # 应用主控制器
@@ -22,11 +24,16 @@ class PathPlanningApp:
 
         # 4. 创建路径规划器并寻找路径
         path_planner = PathPlanner(mesh, voxel_grid, model_processor.voxel_size, self.algorithms[algorithm])
-
-        print(f"起点: {start_point}")
-        print(f"终点: {goal_point}")
-
         path, cost_time = path_planner.find_path(start_point, goal_point, show_process=show_process)
+
+        path_planner_test = PathPlanner(mesh, voxel_grid, model_processor.voxel_size, AStarAlgorithmTest())
+        path_test, cost_time_test = path_planner_test.find_path(start_point, goal_point, show_process=show_process)
+
+        result_visualizer = ResultVisualizer()
+        result_visualizer.show(mesh, start_point, goal_point, path, VisualizerType.open3d, test_path=path_test)
+
+
+
 
 
 if __name__ == "__main__":
@@ -43,4 +50,4 @@ if __name__ == "__main__":
             start_point,
             goal_point,
             "A*",
-            show_process=True)
+            show_process=False)

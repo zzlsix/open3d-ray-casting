@@ -8,7 +8,7 @@ from path_planning.visualization.ProcessVisualizer import AStarProcessVisualizer
 
 
 # A*算法实现
-class AStarAlgorithm(PathPlanningAlgorithm):
+class AStarAlgorithmTest(PathPlanningAlgorithm):
     def __init__(self):
         self.visualizer = AStarProcessVisualizer()
 
@@ -126,42 +126,42 @@ class AStarAlgorithm(PathPlanningAlgorithm):
 
         return None
 
-    # @staticmethod
-    # def heuristic(a, b):
-    #     """计算两点间的欧几里得距离"""
-    #     return np.sqrt(sum((a[i] - b[i]) ** 2 for i in range(3))) * 1.5
-
     @staticmethod
-    def heuristic(a, b, max_weight=2, min_weight=1.0, sensitivity=2):
-        """
-        使用非线性权重函数的启发函数，越靠近目标点权重越大
+    def heuristic(a, b):
+        """计算两点间的欧几里得距离"""
+        return np.sqrt(sum((a[i] - b[i]) ** 2 for i in range(3)))
 
-        参数:
-        a: 当前点坐标 [x, y, z]
-        b: 目标点坐标 [x, y, z]
-        max_weight: 最大权重值
-        min_weight: 最小权重值
-        sensitivity: 敏感度参数，控制权重变化的陡峭程度
-
-        返回:
-        加权后的启发值
-        """
-
-        # 计算欧几里得距离
-        distance = np.sqrt(sum((a[i] - b[i]) ** 2 for i in range(3)))
-
-        # 估计问题空间的特征距离（可以根据实际场景调整）
-        characteristic_distance = np.sqrt(sum((max(abs(a[i]), abs(b[i]))) ** 2 for i in range(3))) / 5.0
-
-        # 使用sigmoid函数计算权重因子 (0到1之间)
-        # 当距离为0时接近1，距离增大时接近0
-        weight_factor = 1.0 / (1.0 + np.exp(sensitivity * (distance / characteristic_distance - 1.0)))
-
-        # 计算最终权重
-        weight = min_weight + weight_factor * (max_weight - min_weight)
-
-        # 返回加权后的启发值
-        return distance * weight
+    # @staticmethod
+    # def heuristic(a, b, max_weight=2.0, min_weight=1.0, sensitivity=5):
+    #     """
+    #     使用非线性权重函数的启发函数，越靠近目标点权重越大
+    #
+    #     参数:
+    #     a: 当前点坐标 [x, y, z]
+    #     b: 目标点坐标 [x, y, z]
+    #     max_weight: 最大权重值
+    #     min_weight: 最小权重值
+    #     sensitivity: 敏感度参数，控制权重变化的陡峭程度
+    #
+    #     返回:
+    #     加权后的启发值
+    #     """
+    #
+    #     # 计算欧几里得距离
+    #     distance = np.sqrt(sum((a[i] - b[i]) ** 2 for i in range(3)))
+    #
+    #     # 估计问题空间的特征距离（可以根据实际场景调整）
+    #     characteristic_distance = np.sqrt(sum((max(abs(a[i]), abs(b[i]))) ** 2 for i in range(3))) / 5.0
+    #
+    #     # 使用sigmoid函数计算权重因子 (0到1之间)
+    #     # 当距离为0时接近1，距离增大时接近0
+    #     weight_factor = 1.0 / (1.0 + np.exp(sensitivity * (distance / characteristic_distance - 1.0)))
+    #
+    #     # 计算最终权重
+    #     weight = min_weight + weight_factor * (max_weight - min_weight)
+    #
+    #     # 返回加权后的启发值
+    #     return distance * weight
 
     @staticmethod
     def _get_neighbors(current):

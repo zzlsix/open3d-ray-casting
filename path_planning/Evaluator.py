@@ -39,7 +39,7 @@ class Evaluator:
 
     def evaluate_algorithm(self, app, mesh, voxel_grid, voxel_size, start_point, goal_point, algorithm, show_process):
         # 记录开始时间
-        start_time = time.time()
+
 
         # 加载模型处理器以获取网格信息
 
@@ -49,12 +49,11 @@ class Evaluator:
         # 寻找路径并记录内存使用
         import tracemalloc
         tracemalloc.start()
+        start_time = time.time()
         path, algo_time = path_planner.find_path(start_point, goal_point)
+        total_time = time.time() - start_time
         current, peak = tracemalloc.get_traced_memory()
         tracemalloc.stop()
-
-        # 计算总时间
-        total_time = time.time() - start_time
 
         # 计算路径指标
         metrics = {}

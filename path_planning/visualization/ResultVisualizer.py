@@ -12,13 +12,13 @@ class VisualizerType(Enum):
 
 class ResultVisualizer(AbstractVisualizer):
 
-    def show(self, mesh, start, end, path, visualizer_type=None):
+    def show(self, mesh, start, end, path, visualizer_type=None, test_path=None):
         if visualizer_type == VisualizerType.open3d:
-            self._visualize_with_open3d(mesh, start, end, path)
+            self._visualize_with_open3d(mesh, start, end, path, test_path=test_path)
         elif visualizer_type == VisualizerType.trimesh:
-            self._visualize_with_trimesh(mesh, start, end, path)
+            self._visualize_with_trimesh(mesh, start, end, path, test_path=test_path)
 
-    def _visualize_with_open3d(self, mesh, start, end, path):
+    def _visualize_with_open3d(self, mesh, start, end, path, test_path):
         """使用Open3D可视化3D模型和路径"""
         # 将Trimesh转换为Open3D网格
         print("通过open3d进行可视化")
@@ -30,22 +30,28 @@ class ResultVisualizer(AbstractVisualizer):
         # 创建起点和终点球体
         start_sphere = o3d.geometry.TriangleMesh.create_sphere(radius=0.5)
         start_sphere.translate(start)
-        start_sphere.paint_uniform_color(Open3dColor.BLUE)  # 蓝色
+        start_sphere.paint_uniform_color(Open3dColor.BLUE.value)  # 蓝色
 
         end_sphere = o3d.geometry.TriangleMesh.create_sphere(radius=1)
         end_sphere.translate(end)
-        end_sphere.paint_uniform_color(Open3dColor.GREEN)  # 绿色
+        end_sphere.paint_uniform_color(Open3dColor.GREEN.value)  # 绿色
 
         # 根据original_path创建路径点的小球
         path_spheres = []
         for point in path:
-            sphere = o3d.geometry.TriangleMesh.create_sphere(radius=0.05)
+            sphere = o3d.geometry.TriangleMesh.create_sphere(radius=0.25)
             sphere.translate(point)
-            sphere.paint_uniform_color(Open3dColor.RED)  # 红色
+            sphere.paint_uniform_color(Open3dColor.RED.value)  # 红色
+            path_spheres.append(sphere)
+        for point in test_path:
+            sphere = o3d.geometry.TriangleMesh.create_sphere(radius=0.25)
+            sphere.translate(point)
+            sphere.paint_uniform_color(Open3dColor.YELLOW.value)
             path_spheres.append(sphere)
 
         # 创建线段连接路径点
         lines = []
+        lines_test = []
         points = []
         for i in range(len(path)):
             points.append(path[i])
@@ -55,11 +61,24 @@ class ResultVisualizer(AbstractVisualizer):
             line_set.points = o3d.utility.Vector3dVector(points)
             line_indices = [[i, i + 1] for i in range(len(points) - 1)]
             line_set.lines = o3d.utility.Vector2iVector(line_indices)
-            line_set.colors = o3d.utility.Vector3dVector([Open3dColor.ORANGE] * len(line_indices))  # 橙色
+            line_set.colors = o3d.utility.Vector3dVector([Open3dColor.ORANGE.value for _ in range(len(line_indices))])
             lines.append(line_set)
 
+        if test_path is not None:
+            test_points = []
+            for i in range(len(test_path)):
+                test_points.append(test_path[i])
+
+            if len(test_points) > 1:
+                line_set = o3d.geometry.LineSet()
+                line_set.points = o3d.utility.Vector3dVector(test_points)
+                line_indices = [[i, i + 1] for i in range(len(test_points) - 1)]
+                line_set.lines = o3d.utility.Vector2iVector(line_indices)
+                line_set.colors = o3d.utility.Vector3dVector([Open3dColor.PURPLE.value for _ in range(len(line_indices))])
+                lines_test.append(line_set)
+
         # 将所有几何体添加到列表中
-        geometries = [o3d_mesh, start_sphere, end_sphere] + path_spheres + lines
+        geometries = [o3d_mesh, start_sphere, end_sphere] + path_spheres + lines + lines_test
 
         # 设置渲染选项并显示
         o3d.visualization.draw_geometries(
@@ -72,7 +91,7 @@ class ResultVisualizer(AbstractVisualizer):
             mesh_show_back_face=False,
         )
 
-    def _visualize_with_trimesh(self, mesh, start, end, path):
+    def _visualize_with_trimesh(self, mesh, start, end, path, test_path):
         """
         使用trimesh可视化3D路径规划结果
 
