@@ -14,7 +14,7 @@ class Evaluator:
 
     def evaluate_all_algorithms(self, obj_file, start_point, goal_point, show_process=False):
         app = PathPlanningApp()
-        algorithms = ["A*", "RRT", "RRT*"]
+        algorithms = ["A*"]
 
         model_processor = ModelProcessor()
         mesh = model_processor.load_model(obj_file)
