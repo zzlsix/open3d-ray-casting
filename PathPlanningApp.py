@@ -26,11 +26,11 @@ class PathPlanningApp:
         path_planner = PathPlanner(mesh, voxel_grid, model_processor.voxel_size, self.algorithms[algorithm])
         path, cost_time = path_planner.find_path(start_point, goal_point, show_process=show_process)
 
-        path_planner_test = PathPlanner(mesh, voxel_grid, model_processor.voxel_size, AStarAlgorithmTest())
-        path_test, cost_time_test = path_planner_test.find_path(start_point, goal_point, show_process=show_process)
-
-        result_visualizer = ResultVisualizer()
-        result_visualizer.show(mesh, start_point, goal_point, path, VisualizerType.open3d, test_path=path_test)
+        # path_planner_test = PathPlanner(mesh, voxel_grid, model_processor.voxel_size, AStarAlgorithmTest())
+        # path_test, cost_time_test = path_planner_test.find_path(start_point, goal_point, show_process=show_process)
+        #
+        # result_visualizer = ResultVisualizer()
+        # result_visualizer.show(mesh, start_point, goal_point, path, VisualizerType.open3d, test_path=path_test)
 
 
 
@@ -49,5 +49,5 @@ if __name__ == "__main__":
     app.run(obj_file,
             start_point,
             goal_point,
-            "A*",
-            show_process=False)
+            "RRT",
+            show_process=True)

@@ -1,6 +1,5 @@
 import random
 import time
-
 import numpy as np
 
 from path_planning.algorithm.PathPlanningAlgorithm import PathPlanningAlgorithm
@@ -9,22 +8,22 @@ from path_planning.visualization.ResultVisualizer import ResultVisualizer
 
 
 class RRTAlgorithm(PathPlanningAlgorithm):
-    def __init__(self, max_iterations=3000, step_size=0.9, goal_sample_rate=0.3, max_extend_length=0.9):
+    def __init__(self, max_iterations=5000, step_size=1, goal_sample_rate=0.4, max_extend_length=1):
         """
         初始化RRT算法
 
         参数:
             max_iterations: 最大迭代次数
-            step_size: 每次扩展的步长
-            goal_sample_rate: 以目标点作为采样点的概率
+            step_size: 每次扩展的基础步长
+            goal_sample_rate: 以目标点作为采样点的概率 (p_goal)
             max_extend_length: 最大扩展长度
-            visualize: 可视化
         """
         self.max_iterations = max_iterations
-        self.step_size = step_size
-        self.goal_sample_rate = goal_sample_rate
+        self.base_step_size = step_size  # 重命名为base_step_size作为基础步长
+        self.goal_sample_rate = goal_sample_rate  # 根据论文，通常设置在0.05-0.2之间
         self.max_extend_length = max_extend_length
         self.visualize = RRTProcessVisualizer()
+        self.alpha = 0.5  # 障碍物密度调节系数
 
     def find_path(self, start, goal, planner, show_process=False):
         """
@@ -47,9 +46,9 @@ class RRTAlgorithm(PathPlanningAlgorithm):
         # 初始化RRT树
         tree = {start: None}  # 节点: 父节点
 
-        # 自适应调整步长
-        self.step_size = min(planner.voxel_size * 3, self.step_size)
-        print(f"RRT步长设置为: {self.step_size}")
+        # 初始化基础步长
+        self.base_step_size = min(planner.voxel_size * 3, self.base_step_size)
+        print(f"RRT基础步长设置为: {self.base_step_size}")
 
         # 设置搜索边界
         bounds = planner.get_bounds()
@@ -71,7 +70,8 @@ class RRTAlgorithm(PathPlanningAlgorithm):
             if i % 100 == 0:
                 print(f"RRT迭代: {i}/{self.max_iterations}")
 
-            # 随机采样一个点
+            # 实现偏置采样策略 (Biased Sampling)
+            # P(x_goal) = p_goal, P(x_random) = 1-p_goal
             if random.random() < self.goal_sample_rate:
                 random_point = goal
             else:
@@ -142,8 +142,34 @@ class RRTAlgorithm(PathPlanningAlgorithm):
         """计算两点之间的欧氏距离"""
         return np.linalg.norm(np.array(p1) - np.array(p2))
 
+    def calculate_obstacle_density(self, point, planner, radius=5):
+        """计算点周围的障碍物密度"""
+        # 在点周围采样检查障碍物
+        samples = 0
+        occupied = 0
+
+        for dx in range(-radius, radius + 1):
+            for dy in range(-radius, radius + 1):
+                for dz in range(-radius, radius + 1):
+                    # 只检查球形区域内的点
+                    if dx ** 2 + dy ** 2 + dz ** 2 <= radius ** 2:
+                        samples += 1
+                        sample_point = (
+                            point[0] + dx * planner.voxel_size,
+                            point[1] + dy * planner.voxel_size,
+                            point[2] + dz * planner.voxel_size
+                        )
+                        if planner.voxel_index.is_occupied(sample_point):
+                            occupied += 1
+
+        # 返回障碍物密度 (0-1之间)
+        return occupied / max(1, samples)
+
     def extend(self, from_node, to_point, planner):
-        """改进的扩展策略"""
+        """
+        改进的扩展策略，实现自适应步长机制
+        Δq = Δq_base · (1 - α · D_obs)
+        """
         # 计算方向向量
         direction = np.array(to_point) - np.array(from_node)
         norm = np.linalg.norm(direction)
@@ -151,14 +177,23 @@ class RRTAlgorithm(PathPlanningAlgorithm):
         if norm < 1e-6:  # 避免除零错误
             return None
 
-        # 使用更小的步长
-        actual_step_size = min(self.step_size, norm, planner.voxel_size * 0.8)
-        direction = direction / norm * actual_step_size
+        # 计算周围障碍物密度
+        obstacle_density = self.calculate_obstacle_density(from_node, planner)
 
-        # 计算新节点
+        # 自适应步长机制
+        # Δq = Δq_base · (1 - α · D_obs)
+        adaptive_step_size = self.base_step_size * (1 - self.alpha * obstacle_density)
+        adaptive_step_size = max(adaptive_step_size, self.base_step_size * 0.1)  # 确保步长不会太小
+
+        # 使用自适应步长
+        actual_step_size = min(adaptive_step_size, norm, planner.voxel_size * 0.8)
+
+        # 按照论文中的公式计算新节点
+        # x_new = x_nearest + min(Δq, ||x_random - x_nearest||) · (x_random - x_nearest)/||x_random - x_nearest||
+        direction = direction / norm * actual_step_size
         new_point = tuple(np.array(from_node) + direction)
 
-        # 更严格的检查
+        # 检查边界
         if not planner.is_within_bounds(new_point):
             return None
 
